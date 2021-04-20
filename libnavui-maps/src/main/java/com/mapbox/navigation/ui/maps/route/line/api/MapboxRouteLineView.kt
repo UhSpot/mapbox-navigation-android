@@ -18,6 +18,11 @@ import com.mapbox.navigation.ui.maps.route.line.model.RouteLineClearValue
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineError
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue
 import com.mapbox.navigation.ui.maps.route.line.model.VanishingRouteLineUpdateValue
+import com.mapbox.navigation.utils.internal.ThreadController
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Responsible for rendering side effects produced by the [MapboxRouteLineApi]. The [MapboxRouteLineApi]
@@ -30,6 +35,9 @@ import com.mapbox.navigation.ui.maps.route.line.model.VanishingRouteLineUpdateVa
  */
 class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
 
+    private val jobControl = ThreadController.getMainScopeAndRootJob()
+    private val mutex = Mutex()
+
     /**
      * Will initialize the route line related layers. Other calls in this class will initialize
      * the layers if they have not yet been initialized. If you have a use case for initializing
@@ -38,7 +46,11 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style a valid [Style] instance
      */
     fun initializeLayers(style: Style) {
-        initializeLayers(style, options)
+        jobControl.scope.launch {
+            mutex.withLock {
+                initializeLayers(style, options)
+            }
+        }
     }
 
     /**
@@ -48,57 +60,87 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param routeDrawData a [Expected<RouteSetValue, RouteLineError>]
      */
     fun renderRouteDrawData(style: Style, routeDrawData: Expected<RouteSetValue, RouteLineError>) {
-        initializeLayers(style, options)
+        jobControl.scope.launch {
+            mutex.withLock {
+                initializeLayers(style, options)
+                when (routeDrawData) {
+                    is Expected.Success -> {
+                        updateLineGradient(
+                            style,
+                            RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID,
+                            routeDrawData.value.routeLineExpression
+                        )
+                        updateLineGradient(
+                            style,
+                            RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID,
+                            routeDrawData.value.casingLineExpression
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.PRIMARY_ROUTE_SOURCE_ID,
+                            routeDrawData.value.primaryRouteSource
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID,
+                            routeDrawData.value.alternativeRoute1Source
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID,
+                            routeDrawData.value.alternativeRoute2Source
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.WAYPOINT_SOURCE_ID,
+                            routeDrawData.value.waypointsSource
+                        )
 
-        when (routeDrawData) {
-            is Expected.Success -> {
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID,
-                    routeDrawData.value.trafficLineExpression
-                )
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID,
-                    routeDrawData.value.routeLineExpression
-                )
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID,
-                    routeDrawData.value.casingLineExpression
-                )
-                updateSource(
-                    style,
-                    RouteConstants.PRIMARY_ROUTE_SOURCE_ID,
-                    routeDrawData.value.primaryRouteSource
-                )
-                updateSource(
-                    style,
-                    RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID,
-                    routeDrawData.value.alternativeRoute1Source
-                )
-                updateSource(
-                    style,
-                    RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID,
-                    routeDrawData.value.alternativeRoute2Source
-                )
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.ALTERNATIVE_ROUTE1_TRAFFIC_LAYER_ID,
-                    routeDrawData.value.altRoute1TrafficExpression
-                )
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.ALTERNATIVE_ROUTE2_TRAFFIC_LAYER_ID,
-                    routeDrawData.value.altRoute2TrafficExpression
-                )
-                updateSource(
-                    style,
-                    RouteConstants.WAYPOINT_SOURCE_ID,
-                    routeDrawData.value.waypointsSource
-                )
+                        routeDrawData.value.trafficLineExpressionProvider?.let {
+                            val trafficExpressionDef = async(ThreadController.IODispatcher) {
+                                it()
+                            }
+                            trafficExpressionDef.await().apply {
+                                updateLineGradient(
+                                    style,
+                                    RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID,
+                                    this
+                                )
+                            }
+                        }
+
+                        routeDrawData.value.altRoute1TrafficExpressionProvider?.let {
+                            val altRoute1TrafficExpressionDef =
+                                async(ThreadController.IODispatcher) {
+                                    it()
+                                }
+                            altRoute1TrafficExpressionDef.await().apply {
+                                updateLineGradient(
+                                    style,
+                                    RouteLayerConstants.ALTERNATIVE_ROUTE1_TRAFFIC_LAYER_ID,
+                                    this
+                                )
+                            }
+                        }
+
+                        routeDrawData.value.altRoute2TrafficExpressionProvider?.let {
+                            val altRoute2TrafficExpressionDef =
+                                async(ThreadController.IODispatcher) {
+                                    it()
+                                }
+                            altRoute2TrafficExpressionDef.await().apply {
+                                updateLineGradient(
+                                    style,
+                                    RouteLayerConstants.ALTERNATIVE_ROUTE2_TRAFFIC_LAYER_ID,
+                                    this
+                                )
+                            }
+                        }
+                    }
+                    is Expected.Failure -> {
+                    }
+                }
             }
-            is Expected.Failure -> { }
         }
     }
 
@@ -112,26 +154,31 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
         style: Style,
         update: Expected<VanishingRouteLineUpdateValue, RouteLineError>
     ) {
-        when (update) {
-            is Expected.Failure -> { }
-            is Expected.Success -> {
-                initializeLayers(style, options)
+        jobControl.scope.launch {
+            mutex.withLock {
+                when (update) {
+                    is Expected.Failure -> {
+                    }
+                    is Expected.Success -> {
+                        initializeLayers(style, options)
 
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID,
-                    update.value.trafficLineExpression
-                )
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID,
-                    update.value.routeLineExpression
-                )
-                updateLineGradient(
-                    style,
-                    RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID,
-                    update.value.casingLineExpression
-                )
+                        updateLineGradient(
+                            style,
+                            RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID,
+                            update.value.trafficLineExpression
+                        )
+                        updateLineGradient(
+                            style,
+                            RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID,
+                            update.value.routeLineExpression
+                        )
+                        updateLineGradient(
+                            style,
+                            RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID,
+                            update.value.casingLineExpression
+                        )
+                    }
+                }
             }
         }
     }
@@ -146,31 +193,36 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
         style: Style,
         clearRouteLineValue: Expected<RouteLineClearValue, RouteLineError>
     ) {
-        when (clearRouteLineValue) {
-            is Expected.Failure -> { }
-            is Expected.Success -> {
-                initializeLayers(style, options)
+        jobControl.scope.launch {
+            mutex.withLock {
+                when (clearRouteLineValue) {
+                    is Expected.Failure -> {
+                    }
+                    is Expected.Success -> {
+                        initializeLayers(style, options)
 
-                updateSource(
-                    style,
-                    RouteConstants.PRIMARY_ROUTE_SOURCE_ID,
-                    clearRouteLineValue.value.primaryRouteSource
-                )
-                updateSource(
-                    style,
-                    RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID,
-                    clearRouteLineValue.value.altRoute1Source
-                )
-                updateSource(
-                    style,
-                    RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID,
-                    clearRouteLineValue.value.altRoute2Source
-                )
-                updateSource(
-                    style,
-                    RouteConstants.WAYPOINT_SOURCE_ID,
-                    clearRouteLineValue.value.waypointsSource
-                )
+                        updateSource(
+                            style,
+                            RouteConstants.PRIMARY_ROUTE_SOURCE_ID,
+                            clearRouteLineValue.value.primaryRouteSource
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID,
+                            clearRouteLineValue.value.altRoute1Source
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID,
+                            clearRouteLineValue.value.altRoute2Source
+                        )
+                        updateSource(
+                            style,
+                            RouteConstants.WAYPOINT_SOURCE_ID,
+                            clearRouteLineValue.value.waypointsSource
+                        )
+                    }
+                }
             }
         }
     }
@@ -181,18 +233,22 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style an instance of the [Style]
      */
     fun showPrimaryRoute(style: Style) {
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID, Visibility.VISIBLE
-        )
+        jobControl.scope.launch {
+            mutex.withLock {
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID, Visibility.VISIBLE
+                )
+            }
+        }
     }
 
     /**
@@ -201,18 +257,22 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style an instance of the [Style]
      */
     fun hidePrimaryRoute(style: Style) {
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID, Visibility.NONE
-        )
+        jobControl.scope.launch {
+            mutex.withLock {
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.PRIMARY_ROUTE_TRAFFIC_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.PRIMARY_ROUTE_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.PRIMARY_ROUTE_CASING_LAYER_ID, Visibility.NONE
+                )
+            }
+        }
     }
 
     /**
@@ -221,30 +281,34 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style an instance of the [Style]
      */
     fun showAlternativeRoutes(style: Style) {
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE1_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE1_CASING_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE2_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE2_CASING_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE1_TRAFFIC_LAYER_ID, Visibility.VISIBLE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE2_TRAFFIC_LAYER_ID, Visibility.VISIBLE
-        )
+        jobControl.scope.launch {
+            mutex.withLock {
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE1_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE1_CASING_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE2_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE2_CASING_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE1_TRAFFIC_LAYER_ID, Visibility.VISIBLE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE2_TRAFFIC_LAYER_ID, Visibility.VISIBLE
+                )
+            }
+        }
     }
 
     /**
@@ -253,30 +317,34 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style an instance of the [Style]
      */
     fun hideAlternativeRoutes(style: Style) {
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE1_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE1_CASING_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE2_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE2_CASING_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE1_TRAFFIC_LAYER_ID, Visibility.NONE
-        )
-        updateLayerVisibility(
-            style,
-            RouteLayerConstants.ALTERNATIVE_ROUTE2_TRAFFIC_LAYER_ID, Visibility.NONE
-        )
+        jobControl.scope.launch {
+            mutex.withLock {
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE1_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE1_CASING_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE2_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE2_CASING_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE1_TRAFFIC_LAYER_ID, Visibility.NONE
+                )
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.ALTERNATIVE_ROUTE2_TRAFFIC_LAYER_ID, Visibility.NONE
+                )
+            }
+        }
     }
 
     /**
@@ -307,7 +375,15 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style an instance of the Style
      */
     fun showOriginAndDestinationPoints(style: Style) {
-        updateLayerVisibility(style, RouteLayerConstants.WAYPOINT_LAYER_ID, Visibility.VISIBLE)
+        jobControl.scope.launch {
+            mutex.withLock {
+                updateLayerVisibility(
+                    style,
+                    RouteLayerConstants.WAYPOINT_LAYER_ID,
+                    Visibility.VISIBLE
+                )
+            }
+        }
     }
 
     /**
@@ -316,7 +392,11 @@ class MapboxRouteLineView(var options: MapboxRouteLineOptions) {
      * @param style an instance of the Style
      */
     fun hideOriginAndDestinationPoints(style: Style) {
-        updateLayerVisibility(style, RouteLayerConstants.WAYPOINT_LAYER_ID, Visibility.NONE)
+        jobControl.scope.launch {
+            mutex.withLock {
+                updateLayerVisibility(style, RouteLayerConstants.WAYPOINT_LAYER_ID, Visibility.NONE)
+            }
+        }
     }
 
     private fun updateLayerVisibility(style: Style, layerId: String, visibility: Visibility) {

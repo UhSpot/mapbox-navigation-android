@@ -10,6 +10,7 @@ import com.mapbox.geojson.FeatureCollection
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.expressions.generated.Expression
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
+import com.mapbox.navigation.testing.MainCoroutineRule
 import com.mapbox.navigation.ui.base.internal.model.route.RouteConstants
 import com.mapbox.navigation.ui.base.model.route.RouteLayerConstants
 import com.mapbox.navigation.ui.maps.common.ShadowValueConverter
@@ -18,6 +19,8 @@ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineClearValue
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue
 import com.mapbox.navigation.ui.maps.route.line.model.VanishingRouteLineUpdateValue
+import com.mapbox.navigation.utils.internal.JobControl
+import com.mapbox.navigation.utils.internal.ThreadController
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.mockk
@@ -25,8 +28,12 @@ import io.mockk.mockkObject
 import io.mockk.slot
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +43,11 @@ import java.util.UUID
 @Config(shadows = [ShadowValueConverter::class])
 @RunWith(RobolectricTestRunner::class)
 class MapboxRouteLineViewTest {
+
+    @get:Rule
+    var coroutineRule = MainCoroutineRule()
+    private val parentJob = SupervisorJob()
+    private val testScope = CoroutineScope(parentJob + coroutineRule.testDispatcher)
 
     lateinit var ctx: Context
 
@@ -70,6 +82,14 @@ class MapboxRouteLineViewTest {
     fun setUp() {
         MockKAnnotations.init(this)
         ctx = ApplicationProvider.getApplicationContext()
+        mockkObject(ThreadController)
+        every { ThreadController.getMainScopeAndRootJob() } returns JobControl(parentJob, testScope)
+        every { ThreadController.IODispatcher } returns coroutineRule.testDispatcher
+    }
+
+    @After
+    fun cleanUp() {
+        unmockkObject(ThreadController)
     }
 
     private fun mockCheckForLayerInitialization(style: Style) {
@@ -320,7 +340,7 @@ class MapboxRouteLineViewTest {
     }
 
     @Test
-    fun renderDrawRouteState() {
+    fun renderDrawRouteState() = coroutineRule.runBlockingTest {
         mockkObject(MapboxRouteLineUtils)
         val options = MapboxRouteLineOptions.Builder(ctx).build()
         val primaryRouteFeatureCollection =
@@ -339,11 +359,11 @@ class MapboxRouteLineViewTest {
         val state = com.mapbox.navigation.ui.base.model.Expected.Success(
             RouteSetValue(
                 primaryRouteFeatureCollection,
-                trafficLineExp,
+                { trafficLineExp },
                 routeLineExp,
                 casingLineEx,
-                alternativeRoute1Expression,
-                alternativeRoute2Expression,
+                { alternativeRoute1Expression },
+                { alternativeRoute2Expression },
                 alternativeRoute1FeatureCollection,
                 alternativeRoute2FeatureCollection,
                 waypointsFeatureCollection
