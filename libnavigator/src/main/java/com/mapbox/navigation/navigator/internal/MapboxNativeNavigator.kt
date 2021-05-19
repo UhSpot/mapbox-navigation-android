@@ -16,6 +16,7 @@ import com.mapbox.navigator.FixLocation
 import com.mapbox.navigator.GraphAccessor
 import com.mapbox.navigator.NavigationStatus
 import com.mapbox.navigator.NavigatorConfig
+import com.mapbox.navigator.NavigatorObserver
 import com.mapbox.navigator.PredictiveCacheController
 import com.mapbox.navigator.RoadObjectMatcher
 import com.mapbox.navigator.RoadObjectsStore
@@ -35,8 +36,6 @@ interface MapboxNativeNavigator {
     companion object {
 
         private const val INDEX_FIRST_LEG = 0
-        private const val GRID_SIZE = 0.0025f
-        private const val BUFFER_DILATION: Short = 1
     }
 
     /**
@@ -76,21 +75,9 @@ interface MapboxNativeNavigator {
      */
     fun updateSensorData(sensorData: SensorData): Boolean
 
-    /**
-     * Gets the status as an offset in time from the last fixed location. This
-     * allows the caller to get predicted statuses in the future along the route if
-     * the device is unable to get fixed locations. Poor reception would be one reason.
-     *
-     * This method uses previous fixes to snap the user's location to the route
-     * and verify that the user is still on the route. This method also determines
-     * if an instruction needs to be called out for the user.
-     *
-     * @param navigatorPredictionMillis millis for navigation status predictions.
-     *
-     * @return the last [TripStatus] as a result of fixed location updates. If the timestamp
-     * is earlier than a previous call, the last status will be returned. The function does not support re-winding time.
-     */
-    suspend fun getStatus(navigatorPredictionMillis: Long): TripStatus
+    fun addNavigatorObserver(navigatorObserver: NavigatorObserver)
+
+    fun removeNavigatorObserver(navigatorObserver: NavigatorObserver)
 
     // Routing
 
@@ -131,22 +118,6 @@ interface MapboxNativeNavigator {
      * @return [BannerInstruction] for step index you passed
      */
     fun getBannerInstruction(index: Int): BannerInstruction?
-
-    /**
-     * Gets a polygon around the currently loaded route. The method uses a bitmap approach
-     * in which you specify a grid size (pixel size) and a dilation (how many pixels) to
-     * expand the initial grid cells that are intersected by the route.
-     *
-     * @param gridSize the size of the individual grid cells
-     * @param bufferDilation the number of pixels to dilate the initial intersection by it can
-     * be thought of as controlling the halo thickness around the route
-     *
-     * @return a geojson as [String] representing the route buffer polygon
-     */
-    fun getRouteGeometryWithBuffer(
-        gridSize: Float = GRID_SIZE,
-        bufferDilation: Short = BUFFER_DILATION
-    ): String?
 
     /**
      * Follows a new leg of the already loaded directions.

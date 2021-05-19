@@ -1,20 +1,16 @@
 package com.mapbox.navigation.navigator.internal
 
-import android.os.SystemClock
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.base.common.logger.Logger
 import com.mapbox.base.common.logger.model.Message
 import com.mapbox.base.common.logger.model.Tag
 import com.mapbox.bindgen.Expected
 import com.mapbox.common.TileStore
-import com.mapbox.geojson.Geometry
 import com.mapbox.geojson.Point
-import com.mapbox.geojson.gson.GeometryGeoJson
 import com.mapbox.navigation.base.options.DeviceProfile
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.options.PredictiveCacheLocationOptions
 import com.mapbox.navigation.base.options.RoutingTilesOptions
-import com.mapbox.navigation.utils.internal.ifNonNull
 import com.mapbox.navigator.BannerInstruction
 import com.mapbox.navigator.CacheDataDomain
 import com.mapbox.navigator.CacheHandle
@@ -25,6 +21,7 @@ import com.mapbox.navigator.HistoryRecorderHandle
 import com.mapbox.navigator.NavigationStatus
 import com.mapbox.navigator.Navigator
 import com.mapbox.navigator.NavigatorConfig
+import com.mapbox.navigator.NavigatorObserver
 import com.mapbox.navigator.PredictiveCacheController
 import com.mapbox.navigator.PredictiveCacheControllerOptions
 import com.mapbox.navigator.PredictiveLocationTrackerOptions
@@ -42,7 +39,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -51,8 +47,6 @@ import kotlin.coroutines.suspendCoroutine
  */
 object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
 
-    private const val GRID_SIZE = 0.0025f
-    private const val BUFFER_DILATION: Short = 1
     private const val PRIMARY_ROUTE_INDEX = 0
     private const val SINGLE_THREAD = 1
     private const val TAG = "MbxNativeNavigatorImpl"
@@ -66,7 +60,6 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
     private var nativeRouter: Router? = null
     private var historyRecorderHandle: HistoryRecorderHandle? = null
     private var route: DirectionsRoute? = null
-    private var routeBufferGeoJson: Geometry? = null
     override var graphAccessor: GraphAccessor? = null
     override var roadObjectMatcher: RoadObjectMatcher? = null
     override var roadObjectsStore: RoadObjectsStore? = null
@@ -101,7 +94,6 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
         roadObjectsStore = nativeComponents.navigator.roadObjectStore()
         cache = nativeComponents.cache
         route = null
-        routeBufferGeoJson = null
         this.logger = logger
         return this
     }
@@ -133,32 +125,11 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
         return navigator!!.updateSensorData(sensorData)
     }
 
-    /**
-     * Gets the status as an offset in time from the last fixed location. This
-     * allows the caller to get predicted statuses in the future along the route if
-     * the device is unable to get fixed locations. Poor reception would be one reason.
-     *
-     * This method uses previous fixes to snap the user's location to the route
-     * and verify that the user is still on the route. This method also determines
-     * if an instruction needs to be called out for the user.
-     *
-     * @param navigatorPredictionMillis millis for navigation status predictions.
-     *
-     * @return the last [TripStatus] as a result of fixed location updates. If the timestamp
-     * is earlier than a previous call, the last status will be returned. The function does not support re-winding time.
-     */
-    override suspend fun getStatus(navigatorPredictionMillis: Long): TripStatus =
-        withContext(NavigatorDispatcher) {
-            val nanos = SystemClock.elapsedRealtimeNanos() + TimeUnit.MILLISECONDS.toNanos(
-                navigatorPredictionMillis
-            )
-            val status = navigator!!.getStatus(nanos)
-            TripStatus(
-                route,
-                routeBufferGeoJson,
-                status
-            )
-        }
+    override fun addNavigatorObserver(navigatorObserver: NavigatorObserver) =
+        navigator!!.addObserver(navigatorObserver)
+
+    override fun removeNavigatorObserver(navigatorObserver: NavigatorObserver) =
+        navigator!!.removeObserver(navigatorObserver)
 
     // Routing
 
@@ -185,11 +156,6 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
                 legIndex,
                 ActiveGuidanceOptionsMapper.mapFrom(route)
             ).let { it.value }
-
-            val geometryWithBuffer = getRouteGeometryWithBuffer(GRID_SIZE, BUFFER_DILATION)
-            routeBufferGeoJson = ifNonNull(geometryWithBuffer) {
-                GeometryGeoJson.fromJson(it)
-            }
 
             result
         }
@@ -233,27 +199,6 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
      */
     override fun getBannerInstruction(index: Int): BannerInstruction? =
         navigator!!.getBannerInstruction(index)
-
-    /**
-     * Gets a polygon around the currently loaded route. The method uses a bitmap approach
-     * in which you specify a grid size (pixel size) and a dilation (how many pixels) to
-     * expand the initial grid cells that are intersected by the route.
-     *
-     * @param gridSize the size of the individual grid cells
-     * @param bufferDilation the number of pixels to dilate the initial intersection by it can
-     * be thought of as controlling the halo thickness around the route
-     *
-     * @return a geojson as [String] representing the route buffer polygon
-     */
-    override fun getRouteGeometryWithBuffer(gridSize: Float, bufferDilation: Short): String? {
-        return try {
-            navigator!!.getRouteBufferGeoJson(gridSize, bufferDilation)
-        } catch (error: Error) {
-            // failed to obtain the route buffer
-            // workaround for https://github.com/mapbox/mapbox-navigation-android/issues/2337
-            null
-        }
-    }
 
     /**
      * Follows a new leg of the already loaded directions.
