@@ -16,10 +16,10 @@ import android.widget.RemoteViews
 import com.mapbox.api.directions.v5.models.BannerInstructions
 import com.mapbox.api.directions.v5.models.BannerText
 import com.mapbox.navigation.base.formatter.DistanceFormatter
+import com.mapbox.navigation.base.internal.factory.TripNotificationStateFactory
 import com.mapbox.navigation.base.internal.time.TimeFormatter
 import com.mapbox.navigation.base.options.NavigationOptions
-import com.mapbox.navigation.base.trip.model.RouteLegProgress
-import com.mapbox.navigation.base.trip.model.RouteProgress
+import com.mapbox.navigation.base.trip.model.TripNotificationState
 import com.mapbox.navigation.trip.notification.NavigationNotificationProvider
 import com.mapbox.navigation.trip.notification.R
 import com.mapbox.navigation.trip.notification.RemoteViewsProvider
@@ -187,12 +187,12 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenUpdateNotificationCalledThenPrimaryTextIsSetToRemoteViews() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
+        val state = mockk<TripNotificationState>(relaxed = true)
         val primaryText = { "Primary Text" }
-        val bannerText = mockBannerText(routeProgress, primaryText)
+        val bannerText = mockBannerText(state, primaryText)
         mockUpdateNotificationAndroidInteractions()
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 1) { bannerText.text() }
         verify(exactly = 1) {
@@ -209,14 +209,16 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenUpdateNotificationCalledThenDistanceTextIsSetToRemoteViews() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
-        val distance = 30f
+        val distance = 30.0
         val duration = 112.4
         val distanceText = distanceSpannable.toString()
-        mockLegProgress(routeProgress, distance, duration)
+        val state = mockk<TripNotificationState>(relaxed = true) {
+            every { distanceRemaining } returns distance
+            every { durationRemaining } returns duration
+        }
         mockUpdateNotificationAndroidInteractions()
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 1) {
             collapsedViews.setTextViewText(
@@ -234,16 +236,20 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenUpdateNotificationCalledThenArrivalTimeIsSetToRemoteViews() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
-        val distance = 30f
+        val distance = 30.0
         val duration = 112.4
-        mockLegProgress(routeProgress, distance, duration)
         mockUpdateNotificationAndroidInteractions()
         val suffix = "this is nice formatting"
         mockTimeFormatter(suffix)
         val result = String.format(FORMAT_STRING, suffix + duration.toDouble().toString())
+        val state = TripNotificationStateFactory.buildTripNotificationState(
+            null,
+            distance,
+            duration,
+            null
+        )
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 1) { collapsedViews.setTextViewText(any(), result) }
         verify(exactly = 1) { expandedViews.setTextViewText(any(), result) }
@@ -251,18 +257,18 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenUpdateNotificationCalledTwiceWithSameDataThenRemoteViewAreNotUpdatedTwice() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
+        val state = mockk<TripNotificationState>(relaxed = true)
         val primaryText = { "Primary Text" }
-        val bannerText = mockBannerText(routeProgress, primaryText)
+        val bannerText = mockBannerText(state, primaryText)
         mockUpdateNotificationAndroidInteractions()
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 1) { bannerText.text() }
         verify(exactly = 1) { collapsedViews.setTextViewText(any(), primaryText()) }
         verify(exactly = 1) { expandedViews.setTextViewText(any(), primaryText()) }
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 2) { bannerText.text() }
         verify(exactly = 1) { collapsedViews.setTextViewText(any(), primaryText()) }
@@ -273,17 +279,17 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenUpdateNotificationCalledTwiceWithDifferentDataThenRemoteViewUpdatedTwice() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
+        val state = mockk<TripNotificationState>(relaxed = true)
         val initialPrimaryText = "Primary Text"
         val changedPrimaryText = "Changed Primary Text"
         var primaryText = initialPrimaryText
         val primaryTextLambda = { primaryText }
-        val bannerText = mockBannerText(routeProgress, primaryTextLambda)
+        val bannerText = mockBannerText(state, primaryTextLambda)
         mockUpdateNotificationAndroidInteractions()
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
         primaryText = changedPrimaryText
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 2) { bannerText.text() }
         verify(exactly = 1) { collapsedViews.setTextViewText(any(), initialPrimaryText) }
@@ -296,13 +302,13 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenGoThroughStartUpdateStopCycleThenNotificationCacheDropped() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
+        val state = mockk<TripNotificationState>(relaxed = true)
         val primaryText = { "Primary Text" }
-        val bannerText = mockBannerText(routeProgress, primaryText)
+        val bannerText = mockBannerText(state, primaryText)
         mockUpdateNotificationAndroidInteractions()
 
         notification.onTripSessionStarted()
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
         notification.onTripSessionStopped()
         notification.onTripSessionStarted()
 
@@ -312,7 +318,7 @@ class MapboxTripNotificationTest {
         assertNull(notification.currentManeuverType)
         assertNull(notification.currentManeuverModifier)
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 2) { bannerText.text() }
         verify(exactly = 2) { collapsedViews.setTextViewText(any(), primaryText()) }
@@ -323,14 +329,14 @@ class MapboxTripNotificationTest {
 
     @Test
     fun whenGoThroughStartUpdateStopCycleThenStartStopSessionDontAffectRemoteViews() {
-        val routeProgress = mockk<RouteProgress>(relaxed = true)
+        val state = mockk<TripNotificationState>(relaxed = true)
         val primaryText = { "Primary Text" }
-        val bannerText = mockBannerText(routeProgress, primaryText)
+        val bannerText = mockBannerText(state, primaryText)
         mockUpdateNotificationAndroidInteractions()
 
         notification.onTripSessionStarted()
 
-        notification.updateNotification(routeProgress)
+        notification.updateNotification(state)
 
         verify(exactly = 1) { bannerText.text() }
         verify(exactly = 1) { collapsedViews.setTextViewText(any(), primaryText()) }
@@ -450,32 +456,19 @@ class MapboxTripNotificationTest {
     }
 
     private fun mockBannerText(
-        routeProgress: RouteProgress,
+        state: TripNotificationState,
         primaryText: () -> String,
         primaryType: () -> String = { MANEUVER_TYPE },
         primaryModifier: () -> String = { MANEUVER_MODIFIER }
     ): BannerText {
         val bannerText = mockk<BannerText>()
         val bannerInstructions = mockk<BannerInstructions>()
-        every { routeProgress.bannerInstructions } returns bannerInstructions
+        every { state.bannerInstructions } returns bannerInstructions
         every { bannerInstructions.primary() } returns bannerText
         every { bannerText.text() } answers { primaryText() }
         every { bannerText.type() } answers { primaryType() }
         every { bannerText.modifier() } answers { primaryModifier() }
         return bannerText
-    }
-
-    @Suppress("SameParameterValue")
-    private fun mockLegProgress(
-        routeProgress: RouteProgress,
-        distance: Float,
-        duration: Double
-    ): RouteLegProgress {
-        val currentLegProgress = mockk<RouteLegProgress>(relaxed = true)
-        every { routeProgress.currentLegProgress } returns currentLegProgress
-        every { currentLegProgress.currentStepProgress?.distanceRemaining } returns distance
-        every { currentLegProgress.durationRemaining } returns duration
-        return currentLegProgress
     }
 
     private fun mockTimeFormatter(@Suppress("SameParameterValue") suffix: String) {

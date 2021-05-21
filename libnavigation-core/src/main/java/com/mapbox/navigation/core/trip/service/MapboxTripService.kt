@@ -6,9 +6,11 @@ import android.content.Intent
 import android.os.Build
 import com.mapbox.base.common.logger.Logger
 import com.mapbox.base.common.logger.model.Message
+import com.mapbox.navigation.base.internal.factory.TripNotificationStateFactory
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.base.trip.notification.TripNotification
 import com.mapbox.navigation.utils.internal.ifChannelException
+import com.mapbox.navigation.utils.internal.ifNonNull
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import java.util.concurrent.atomic.AtomicBoolean
@@ -131,7 +133,15 @@ internal class MapboxTripService(
      * Update the trip's information in the notification bar
      */
     override fun updateNotification(routeProgress: RouteProgress?) {
-        tripNotification.updateNotification(routeProgress)
+        val notificationState = ifNonNull(routeProgress) { progress ->
+            TripNotificationStateFactory.buildTripNotificationState(
+                progress.bannerInstructions,
+                progress.currentLegProgress?.currentStepProgress?.distanceRemaining?.toDouble(),
+                progress.currentLegProgress?.durationRemaining,
+                progress.currentLegProgress?.currentStepProgress?.step?.drivingSide()
+            )
+        }
+        tripNotification.updateNotification(notificationState)
     }
 
     /**
