@@ -54,10 +54,10 @@ internal class ArrivalProgressObserver(
             ?: return
 
         when (routeProgress.currentState) {
-            RouteProgressState.TRACKING,
             RouteProgressState.COMPLETE -> {
                 // continue
             }
+            RouteProgressState.TRACKING,
             RouteProgressState.INITIALIZED,
             RouteProgressState.OFF_ROUTE,
             RouteProgressState.UNCERTAIN -> {
@@ -69,12 +69,11 @@ internal class ArrivalProgressObserver(
             return
         }
 
-        val arrivalOptions = arrivalController.arrivalOptions()
         val hasMoreLegs = hasMoreLegs(routeProgress)
         if (hasMoreLegs) {
-            checkWaypointArrival(arrivalOptions, routeProgress, routeLegProgress)
+            doOnWaypointArrival(routeProgress, routeLegProgress)
         } else if (!hasMoreLegs) {
-            checkFinalDestinationArrival(arrivalOptions, routeProgress)
+            doFinalDestinationArrival(routeProgress)
         }
     }
 
@@ -82,20 +81,6 @@ internal class ArrivalProgressObserver(
         val currentLegIndex = routeProgress.currentLegProgress?.legIndex
         val lastLegIndex = routeProgress.route.legs()?.lastIndex
         return (currentLegIndex != null && lastLegIndex != null) && currentLegIndex < lastLegIndex
-    }
-
-    private fun checkWaypointArrival(
-        arrivalOptions: ArrivalOptions,
-        routeProgress: RouteProgress,
-        routeLegProgress: RouteLegProgress
-    ) {
-        val isEarlyInTime = arrivalOptions.arrivalInSeconds != null &&
-            routeLegProgress.durationRemaining <= arrivalOptions.arrivalInSeconds
-        val isEarlyInDistance = arrivalOptions.arrivalInMeters != null &&
-            routeLegProgress.distanceRemaining <= arrivalOptions.arrivalInMeters
-        if (isEarlyInTime || isEarlyInDistance) {
-            doOnWaypointArrival(routeProgress, routeLegProgress)
-        }
     }
 
     private fun doOnWaypointArrival(
@@ -109,19 +94,6 @@ internal class ArrivalProgressObserver(
         val moveToNextLeg = arrivalController.navigateNextRouteLeg(routeLegProgress)
         if (moveToNextLeg) {
             navigateNextRouteLeg()
-        }
-    }
-
-    private fun checkFinalDestinationArrival(
-        arrivalOptions: ArrivalOptions,
-        routeProgress: RouteProgress
-    ) {
-        val isEarlyInTime = arrivalOptions.arrivalInSeconds != null &&
-            routeProgress.durationRemaining <= arrivalOptions.arrivalInSeconds
-        val isEarlyInDistance = arrivalOptions.arrivalInMeters != null &&
-            routeProgress.distanceRemaining <= arrivalOptions.arrivalInMeters
-        if (isEarlyInTime || isEarlyInDistance) {
-            doFinalDestinationArrival(routeProgress)
         }
     }
 
