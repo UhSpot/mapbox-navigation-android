@@ -75,6 +75,7 @@ import com.mapbox.navigation.ui.maps.route.line.model.RouteLineResources;
 import com.mapbox.navigation.ui.maps.route.line.model.RouteNotFound;
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue;
 import com.mapbox.navigation.ui.maps.route.line.model.VanishingRouteLineUpdateValue;
+import com.mapbox.navigation.ui.maps.util.RouteLineUtils;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -482,14 +483,11 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
           closestRouteResult.onValue(input -> {
             final DirectionsRoute selectedRoute = input.getRoute();
             if (selectedRoute != mapboxRouteLineApi.getPrimaryRoute()) {
-              mapboxRouteLineApi.updateToPrimaryRoute(
-                  selectedRoute,
-                  routeSetValueRouteLineErrorExpected -> {
-                    // NOTE: We don't have to render the state because there is a RoutesObserver on the
-                    // MapboxNavigation object which will draw the routes. Rendering the state would draw the routes
-                    // twice unnecessarily in this implementation.
-                    mapboxNavigation.setRoutes(mapboxRouteLineApi.getRoutes());
-                  });
+              List<DirectionsRoute> updatedRoutes = RouteLineUtils.updatePrimaryRoute(
+                      mapboxRouteLineApi.getRoutes(),
+                      selectedRoute
+              );
+              mapboxNavigation.setRoutes(updatedRoutes);
             }
           });
         }
