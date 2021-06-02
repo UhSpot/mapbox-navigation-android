@@ -17,10 +17,9 @@ libnavui-resources \
 libnavui-voice \
 libnavigation-android \
 libnavui-speedlimit \
+libnavui-uhspot \
 
 APPLICATION_MODULES = \
-qa-test-app \
-examples \
 instrumentation-tests \
 
 define run-gradle-tasks

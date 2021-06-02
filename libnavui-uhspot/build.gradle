@@ -1,0 +1,107 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-kapt'
+apply plugin: 'kotlin-parcelize'
+apply plugin: 'org.jetbrains.dokka'
+apply plugin: 'com.jaredsburrows.license'
+apply from: "${rootDir}/gradle/script-git-version.gradle"
+apply from: "${rootDir}/gradle/ktlint.gradle"
+apply from: file("${rootDir}/gradle/artifact-settings.gradle")
+apply from: "${rootDir}/gradle/kdoc-settings.gradle"
+
+version = project.ext.versionName
+group = project.ext.mapboxArtifactGroupId
+
+android {
+    compileSdkVersion androidVersions.compileSdkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+     buildFeatures {
+        viewBinding true
+    }
+
+    dataBinding {
+        enabled = true
+    }
+
+    def getGitHash = { ->
+        try {
+            def stdout = new ByteArrayOutputStream()
+            exec {
+                commandLine 'git', 'rev-parse', '--short', 'HEAD'
+                standardOutput = stdout
+            }
+            return stdout.toString().trim()
+        } catch (Exception exception) {
+            return ""
+        }
+    }
+
+    defaultConfig {
+        minSdkVersion androidVersions.minSdkVersion
+        targetSdkVersion androidVersions.targetSdkVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments clearPackageData: 'true'
+        consumerProguardFiles 'proguard-rules.pro', "${rootDir}/proguard/proguard-project.pro"
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+        unitTests.includeAndroidResources = true
+    }
+}
+
+dependencies {
+    kapt "com.android.databinding:compiler:${pluginVersion.kapt}"
+    // Mapbox Navigation SDK
+    api project(':libnavigation-android')
+
+    // Kotlin support
+    implementation dependenciesList.kotlinStdLib
+
+    //Coroutines
+    implementation dependenciesList.coroutinesAndroid
+
+    // Support libraries
+    implementation dependenciesList.androidXCore
+    implementation dependenciesList.materialDesign
+    implementation dependenciesList.androidXAppCompat
+    implementation dependenciesList.androidXCardView
+    implementation dependenciesList.androidXConstraintLayout
+
+    implementation dependenciesList.gmsLocation
+
+    implementation dependenciesList.multidex
+
+    // Leak Canary
+    debugImplementation dependenciesList.leakCanaryDebug
+
+    // Crashlytics
+    implementation dependenciesList.firebaseCrashlyticsNdk
+}
+
+kapt {
+    generateStubs = true
+}
+
+dokkaHtml {
+    outputDirectory.set(kdocPath)
+    moduleName.set("UI Trip Progress")
+    dokkaSourceSets {
+        configureEach {
+            reportUndocumented.set(true)
+            perPackageOption {
+                matchingRegex.set("com.uhspot.navigation.ui.internal.*")
+                suppress.set(true)
+            }
+        }
+    }
+}
+
+apply from: "${rootDir}/gradle/track-public-apis.gradle"
+apply from: "${rootDir}/gradle/jacoco.gradle"
+apply from: "${rootDir}/gradle/publish.gradle"

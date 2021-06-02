@@ -16,4 +16,5 @@ include ':instrumentation-tests',
         ':libnavui-maneuver',
         ':libnavui-resources',
         ':libnavui-voice',
-        ':libnavui-speedlimit'
+        ':libnavui-speedlimit',
+        ':libnavui-uhspot'
