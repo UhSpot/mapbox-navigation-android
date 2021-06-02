@@ -24,7 +24,6 @@ buildscript {
     classpath pluginDependencies.googleServices
     classpath pluginDependencies.license
     classpath pluginDependencies.mapboxSdkVersions
-    classpath pluginDependencies.mapboxSdkRegistry
     classpath pluginDependencies.mapboxAccessToken
     classpath pluginDependencies.mapboxNativeDownload
     classpath pluginDependencies.dokka
@@ -117,6 +116,8 @@ subprojects {
     }
   }
 }
+
+
 
 apply from: "${rootDir}/gradle/kdoc-settings.gradle"
 apply from: "${rootDir}/gradle/verify-common-sdk-version.gradle"

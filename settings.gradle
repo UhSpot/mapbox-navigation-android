@@ -1,6 +1,4 @@
-include ':examples',
-        ':app-tests-wrapper',
-        ':instrumentation-tests',
+include ':instrumentation-tests',
         ':libnavigation-android',
         ':libnavigator',
         ':libnavigation-base',
@@ -18,5 +16,4 @@ include ':examples',
         ':libnavui-maneuver',
         ':libnavui-resources',
         ':libnavui-voice',
-        ':libnavui-speedlimit',
-        ':qa-test-app'
+        ':libnavui-speedlimit'

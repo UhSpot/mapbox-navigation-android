@@ -8,6 +8,8 @@ apply from: "${rootDir}/gradle/kdoc-settings.gradle"
 android {
     compileSdkVersion androidVersions.compileSdkVersion
 
+    buildToolsVersion "30.0.2"
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
