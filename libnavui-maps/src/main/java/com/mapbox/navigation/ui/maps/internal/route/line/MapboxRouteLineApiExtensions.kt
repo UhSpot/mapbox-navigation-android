@@ -8,7 +8,9 @@ import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.model.ClosestRouteValue
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLine
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineClearValue
+import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineError
+import com.mapbox.navigation.ui.maps.route.line.model.RouteLineUpdateValue
 import com.mapbox.navigation.ui.maps.route.line.model.RouteNotFound
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue
 import kotlin.coroutines.resume
@@ -19,22 +21,6 @@ import kotlin.coroutines.suspendCoroutine
  * an alternative to those callbacks by providing Kotlin oriented suspend functions.
  */
 object MapboxRouteLineApiExtensions {
-
-    /**
-     * Updates which route is identified as the primary route.
-     *
-     * @param route the [DirectionsRoute] which should be designated as the primary
-     * @return a state which contains the side effects to be applied to the map displaying the
-     * newly designated route line.
-     */
-    suspend fun MapboxRouteLineApi.updateToPrimaryRoute(route: DirectionsRoute):
-        Expected<RouteLineError, RouteSetValue> {
-        return suspendCoroutine { continuation ->
-            this.updateToPrimaryRoute(
-                route
-            ) { value -> continuation.resume(value) }
-        }
-    }
 
     /**
      * Sets the routes that will be operated on.
@@ -100,6 +86,29 @@ object MapboxRouteLineApiExtensions {
     suspend fun MapboxRouteLineApi.clearRouteLine(): Expected<RouteLineError, RouteLineClearValue> {
         return suspendCoroutine { continuation ->
             this.clearRouteLine { value -> continuation.resume(value) }
+        }
+    }
+
+    /**
+     * If successful this method returns a [RouteLineUpdateValue] that when rendered will
+     * display the route line with the route leg indicated by the provided leg index highlighted.
+     * All the other legs will only show a simple line with
+     * [RouteLineColorResources.inActiveRouteLegsColor].
+     *
+     * This is intended to be used with routes that have multiple waypoints.
+     * In addition, calling this method does not change the state of the route line.
+     *
+     * This method can be useful for showing a route overview with a specific route leg highlighted.
+     *
+     * @param legIndex the route leg index that should appear most prominent.
+     * @return a [RouteLineUpdateValue] for rendering or an error
+     */
+    suspend fun MapboxRouteLineApi.showRouteWithLegIndexHighlighted(legIndex: Int):
+        Expected<RouteLineError, RouteLineUpdateValue> {
+        return suspendCoroutine { continuation ->
+            this.showRouteWithLegIndexHighlighted(legIndex) { value ->
+                continuation.resume(value)
+            }
         }
     }
 }

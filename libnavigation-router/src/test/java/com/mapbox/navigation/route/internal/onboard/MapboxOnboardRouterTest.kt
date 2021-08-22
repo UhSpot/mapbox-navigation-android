@@ -5,19 +5,21 @@ import com.mapbox.api.directions.v5.MapboxDirections
 import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.base.common.logger.Logger
 import com.mapbox.bindgen.Expected
 import com.mapbox.geojson.Point
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.coordinates
 import com.mapbox.navigation.base.route.RouteRefreshCallback
 import com.mapbox.navigation.base.route.RouteRefreshError
-import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.navigator.internal.MapboxNativeNavigator
+import com.mapbox.navigation.route.internal.util.ACCESS_TOKEN_QUERY_PARAM
 import com.mapbox.navigation.route.internal.util.httpUrl
+import com.mapbox.navigation.route.internal.util.redactQueryParam
 import com.mapbox.navigation.route.offboard.RouteBuilderProvider
 import com.mapbox.navigation.testing.MainCoroutineRule
-import com.mapbox.navigation.utils.NavigationException
 import com.mapbox.navigation.utils.internal.RequestMap
 import com.mapbox.navigation.utils.internal.ThreadController
 import com.mapbox.navigator.RouterError
@@ -69,7 +71,7 @@ class MapboxOnboardRouterTest {
     var coroutineRule = MainCoroutineRule()
 
     private val navigator: MapboxNativeNavigator = mockk(relaxUnitFun = true)
-    private val routerCallback: Router.Callback = mockk(relaxUnitFun = true)
+    private val routerCallback: RouterCallback = mockk(relaxUnitFun = true)
     private val routerResultSuccess: Expected<RouterError, String> = mockk {
         every { isValue } returns true
         every { isError } returns false
@@ -80,15 +82,28 @@ class MapboxOnboardRouterTest {
         every { isValue } returns false
         every { isError } returns true
         every { value } returns null
-        every { error } returns RouterError(FAILURE_MESSAGE, FAILURE_CODE)
+        every { error } returns RouterError(FAILURE_MESSAGE, FAILURE_CODE, REQUEST_ID)
     }
     private val routerOptions: RouteOptions = provideDefaultRouteOptions()
-    private val logger: Logger = mockk(relaxUnitFun = true)
     private val context = mockk<Context>()
     private val mapboxDirections = mockk<MapboxDirections>(relaxed = true)
     private val mapboxDirectionsBuilder = mockk<MapboxDirections.Builder>(relaxed = true)
+    private val routerOrigin = RouterOrigin.Onboard
+    private val accessToken = "pk.123"
 
-    private var onboardRouter: MapboxOnboardRouter = MapboxOnboardRouter(navigator, context, logger)
+    private var onboardRouter: MapboxOnboardRouter = MapboxOnboardRouter(
+        accessToken,
+        navigator,
+        context
+    )
+
+    private val url =
+        MapboxDirections.builder()
+            .accessToken(accessToken)
+            .routeOptions(routerOptions)
+            .build()
+            .httpUrl()
+            .toUrl()
 
     @Before
     fun setUp() {
@@ -100,9 +115,10 @@ class MapboxOnboardRouterTest {
             RouteBuilderProvider.getBuilder(null)
         } returns mapboxDirectionsBuilder
         every { mapboxDirectionsBuilder.interceptor(any()) } returns mapboxDirectionsBuilder
-        every { mapboxDirectionsBuilder.enableRefresh(any()) } returns mapboxDirectionsBuilder
+        every { mapboxDirectionsBuilder.routeOptions(any()) } returns mapboxDirectionsBuilder
+        every { mapboxDirectionsBuilder.accessToken(any()) } returns mapboxDirectionsBuilder
         every { mapboxDirectionsBuilder.build() } returns mapboxDirections
-        every { mapboxDirections.httpUrl() } returns URL.toHttpUrlOrNull()!!
+        every { mapboxDirections.httpUrl() } returns url.toHttpUrlOrNull()!!
     }
 
     @After
@@ -117,25 +133,37 @@ class MapboxOnboardRouterTest {
     }
 
     @Test
-    fun checkCallbackCalledOnFailure() = coroutineRule.runBlockingTest {
-        val exceptionSlot = slot<NavigationException>()
+    fun checkCallbackCalledOnFailureWithRedactedToken() = coroutineRule.runBlockingTest {
         coEvery { navigator.getRoute(any()) } returns routerResultFailure
 
         onboardRouter.getRoute(routerOptions, routerCallback)
 
-        coVerify { navigator.getRoute(URL.toString()) }
-        verify { routerCallback.onFailure(capture(exceptionSlot)) }
-        assertEquals(ERROR_MESSAGE, exceptionSlot.captured.message)
+        val expected = listOf(
+            RouterFailure(
+                url = url.toHttpUrlOrNull()!!.redactQueryParam(ACCESS_TOKEN_QUERY_PARAM).toUrl(),
+                routerOrigin = routerOrigin,
+                message = FAILURE_MESSAGE,
+                code = FAILURE_CODE,
+                throwable = null
+            )
+        )
+
+        coVerify { navigator.getRoute(url.toString()) }
+        verify { routerCallback.onFailure(expected, routerOptions) }
     }
 
     @Test
-    fun checkCallbackCalledOnSuccess() = coroutineRule.runBlockingTest {
+    fun checkCallbackCalledOnSuccess_andContainsOriginalOptions() = coroutineRule.runBlockingTest {
         coEvery { navigator.getRoute(any()) } returns routerResultSuccess
 
         onboardRouter.getRoute(routerOptions, routerCallback)
 
-        coVerify { navigator.getRoute(URL.toString()) }
-        verify { routerCallback.onResponse(DirectionsResponse.fromJson(SUCCESS_RESPONSE).routes()) }
+        coVerify { navigator.getRoute(url.toString()) }
+
+        val expected = DirectionsResponse.fromJson(SUCCESS_RESPONSE).routes().map {
+            it.toBuilder().routeOptions(routerOptions).build()
+        }
+        verify(exactly = 1) { routerCallback.onRoutesReady(expected, routerOrigin) }
     }
 
     @Test
@@ -145,16 +173,16 @@ class MapboxOnboardRouterTest {
         }
 
         val latch = CountDownLatch(1)
-        val callback: Router.Callback = object : Router.Callback {
-            override fun onResponse(routes: List<DirectionsRoute>) {
+        val callback: RouterCallback = object : RouterCallback {
+            override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
                 fail()
             }
 
-            override fun onFailure(throwable: Throwable) {
+            override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                 fail()
             }
 
-            override fun onCanceled() {
+            override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                 latch.countDown()
             }
         }
@@ -172,7 +200,7 @@ class MapboxOnboardRouterTest {
 
         onboardRouter.getRoute(routerOptions, routerCallback)
 
-        verify { routerCallback.onCanceled() }
+        verify { routerCallback.onCanceled(routerOptions, routerOrigin) }
     }
 
     @Test
@@ -206,31 +234,31 @@ class MapboxOnboardRouterTest {
         }
 
         val firstLatch = CountDownLatch(1)
-        val firstCallback: Router.Callback = object : Router.Callback {
-            override fun onResponse(routes: List<DirectionsRoute>) {
+        val firstCallback: RouterCallback = object : RouterCallback {
+            override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
                 fail()
             }
 
-            override fun onFailure(throwable: Throwable) {
+            override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                 fail()
             }
 
-            override fun onCanceled() {
+            override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                 firstLatch.countDown()
             }
         }
 
         val secondLatch = CountDownLatch(1)
-        val secondCallback: Router.Callback = object : Router.Callback {
-            override fun onResponse(routes: List<DirectionsRoute>) {
+        val secondCallback: RouterCallback = object : RouterCallback {
+            override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
                 fail()
             }
 
-            override fun onFailure(throwable: Throwable) {
+            override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                 fail()
             }
 
-            override fun onCanceled() {
+            override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                 secondLatch.countDown()
             }
         }
@@ -257,7 +285,7 @@ class MapboxOnboardRouterTest {
         mockkConstructor(RequestMap::class)
         val idSlot = slot<Long>()
         every { anyConstructed<RequestMap<Job>>().put(capture(idSlot), any()) } just Runs
-        onboardRouter = MapboxOnboardRouter(navigator, context, logger)
+        onboardRouter = MapboxOnboardRouter(accessToken, navigator, context)
         coEvery { navigator.getRoute(any()) } returns routerResultSuccess
 
         onboardRouter.getRoute(routerOptions, routerCallback)
@@ -271,7 +299,7 @@ class MapboxOnboardRouterTest {
         mockkConstructor(RequestMap::class)
         val idSlot = slot<Long>()
         every { anyConstructed<RequestMap<Job>>().put(capture(idSlot), any()) } just Runs
-        onboardRouter = MapboxOnboardRouter(navigator, context, logger)
+        onboardRouter = MapboxOnboardRouter(accessToken, navigator, context)
         coEvery { navigator.getRoute(any()) } returns routerResultFailure
 
         onboardRouter.getRoute(routerOptions, routerCallback)
@@ -285,7 +313,7 @@ class MapboxOnboardRouterTest {
         mockkConstructor(RequestMap::class)
         val idSlot = slot<Long>()
         every { anyConstructed<RequestMap<Job>>().put(capture(idSlot), any()) } just Runs
-        onboardRouter = MapboxOnboardRouter(navigator, context, logger)
+        onboardRouter = MapboxOnboardRouter(accessToken, navigator, context)
         coEvery { navigator.getRoute(any()) } coAnswers { throw CancellationException() }
 
         onboardRouter.getRoute(routerOptions, routerCallback)
@@ -301,7 +329,7 @@ class MapboxOnboardRouterTest {
 
         onboardRouter.getRoute(routerOptions, routerCallback)
 
-        verify { routerCallback.onResponse(capture(routesSlot)) }
+        verify { routerCallback.onRoutesReady(capture(routesSlot), routerOrigin) }
 
         val delta = 0.000001
         // route
@@ -391,7 +419,6 @@ class MapboxOnboardRouterTest {
         return RouteOptions.builder()
             .applyDefaultNavigationOptions()
             .apply {
-                accessToken(ACCESS_TOKEN)
                 coordinates(origin, waypoints, destination)
             }.build()
     }
@@ -463,178 +490,162 @@ class MapboxOnboardRouterTest {
         private const val COMPONENT_TEXT = "North"
         private const val COMPONENT_TYPE = "text"
 
-        private val URL =
-            MapboxDirections.builder()
-                .accessToken(ACCESS_TOKEN)
-                .origin(origin)
-                .also { builder ->
-                    waypoints.forEach { wp -> builder.addWaypoint(wp) }
-                }
-                .destination(destination)
-                .build()
-                .httpUrl()
-                .toUrl()
-
         private const val ERROR_MESSAGE =
             "Error occurred fetching offline route: No suitable edges near location - Code: 171"
         private const val FAILURE_MESSAGE = "No suitable edges near location"
         private const val FAILURE_CODE = 171
-        private const val SUCCESS_RESPONSE = "{\n" +
-            "  \"routes\": [\n" +
-            "    {\n" +
-            "      \"geometry\": \"\",\n" +
-            "      \"legs\": [\n" +
-            "        {\n" +
-            "          \"summary\": \"PA 283 West, Fishburn Road\",\n" +
-            "          \"weight\": 2383.1,\n" +
-            "          \"duration\": 2248.5,\n" +
-            "          \"steps\": [\n" +
-            "            {\n" +
-            "              \"intersections\": [\n" +
-            "                {\n" +
-            "                  \"out\": 0,\n" +
-            "                  \"entry\": [\n" +
-            "                    true\n" +
-            "                  ],\n" +
-            "                  \"bearings\": [\n" +
-            "                    82\n" +
-            "                  ],\n" +
-            "                  \"location\": [\n" +
-            "                    -76.299169,\n" +
-            "                    40.042522\n" +
-            "                  ]\n" +
-            "                },\n" +
-            "                {\n" +
-            "                  \"out\": 0,\n" +
-            "                  \"in\": 1,\n" +
-            "                  \"entry\": [\n" +
-            "                    true,\n" +
-            "                    false,\n" +
-            "                    true\n" +
-            "                  ],\n" +
-            "                  \"bearings\": [\n" +
-            "                    75,\n" +
-            "                    255,\n" +
-            "                    345\n" +
-            "                  ],\n" +
-            "                  \"location\": [\n" +
-            "                    -76.298855,\n" +
-            "                    40.042556\n" +
-            "                  ]\n" +
-            "                },\n" +
-            "                {\n" +
-            "                  \"out\": 0,\n" +
-            "                  \"in\": 2,\n" +
-            "                  \"entry\": [\n" +
-            "                    true,\n" +
-            "                    true,\n" +
-            "                    false,\n" +
-            "                    true\n" +
-            "                  ],\n" +
-            "                  \"bearings\": [\n" +
-            "                    75,\n" +
-            "                    165,\n" +
-            "                    255,\n" +
-            "                    345\n" +
-            "                  ],\n" +
-            "                  \"location\": [\n" +
-            "                    -76.297812,\n" +
-            "                    40.042673\n" +
-            "                  ]\n" +
-            "                }\n" +
-            "              ],\n" +
-            "              \"driving_side\": \"right\",\n" +
-            "              \"geometry\": \"s`_kkA`y|opCcAsReEcy@Eq@]oDa@gEEu@uKgwB\",\n" +
-            "              \"mode\": \"driving\",\n" +
-            "              \"maneuver\": {\n" +
-            "                \"bearing_after\": 82,\n" +
-            "                \"bearing_before\": 0,\n" +
-            "                \"location\": [\n" +
-            "                  -76.299169,\n" +
-            "                  40.042522\n" +
-            "                ],\n" +
-            "                \"modifier\": \"left\",\n" +
-            "                \"type\": \"depart\",\n" +
-            "                \"instruction\": \"Head east on East Fulton Street\"\n" +
-            "              },\n" +
-            "              \"weight\": 63.8,\n" +
-            "              \"duration\": 50.8,\n" +
-            "              \"name\": \"East Fulton Street\",\n" +
-            "              \"distance\": 293.2,\n" +
-            "              \"voiceInstructions\": [\n" +
-            "                {\n" +
-            "                  \"distanceAlongGeometry\": 293.2,\n" +
-            "                  \"announcement\": \"Head east on East Fulton Street, then turn " +
-            "right onto North Ann Street\",\n" +
-            "                  \"ssmlAnnouncement\": \"<speak><amazon:effect name=\\\"drc\\\">" +
-            "<prosody rate=\\\"1.08\\\">Head east on East Fulton Street, then turn right onto " +
-            "North Ann Street</prosody></amazon:effect></speak>\"\n" +
-            "                },\n" +
-            "                {\n" +
-            "                  \"distanceAlongGeometry\": 86.6,\n" +
-            "                  \"announcement\": \"Turn right onto North Ann Street, then turn " +
-            "left onto East Chestnut Street (PA 23 East)\",\n" +
-            "                  \"ssmlAnnouncement\": \"<speak><amazon:effect name=\\\"drc\\\">" +
-            "<prosody rate=\\\"1.08\\\">Turn right onto North Ann Street, then turn left onto " +
-            "East Chestnut Street (PA <say-as interpret-as=\\\"address\\\">23</say-as> " +
-            "East)</prosody></amazon:effect></speak>\"\n" +
-            "                }\n" +
-            "              ],\n" +
-            "              \"bannerInstructions\": [\n" +
-            "                {\n" +
-            "                  \"distanceAlongGeometry\": 293.2,\n" +
-            "                  \"primary\": {\n" +
-            "                    \"type\": \"turn\",\n" +
-            "                    \"modifier\": \"right\",\n" +
-            "                    \"components\": [\n" +
-            "                      {\n" +
-            "                        \"text\": \"North\",\n" +
-            "                        \"type\": \"text\",\n" +
-            "                        \"abbr\": \"N\",\n" +
-            "                        \"abbr_priority\": 1\n" +
-            "                      },\n" +
-            "                      {\n" +
-            "                        \"text\": \"Ann Street\",\n" +
-            "                        \"type\": \"text\",\n" +
-            "                        \"abbr\": \"Ann St\",\n" +
-            "                        \"abbr_priority\": 0\n" +
-            "                      }\n" +
-            "                    ],\n" +
-            "                    \"text\": \"North Ann Street\"\n" +
-            "                  },\n" +
-            "                  \"secondary\": null\n" +
-            "                }\n" +
-            "              ]\n" +
-            "            }\n" +
-            "          ],\n" +
-            "          \"distance\": 50369.7\n" +
-            "        }\n" +
-            "      ],\n" +
-            "      \"weight_name\": \"routability\",\n" +
-            "      \"weight\": 2383.1,\n" +
-            "      \"duration\": 2248.5,\n" +
-            "      \"distance\": 50369.7,\n" +
-            "      \"voiceLocale\": \"en-US\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"waypoints\": [\n" +
-            "    {\n" +
-            "      \"name\": \"East Fulton Street\",\n" +
-            "      \"location\": [\n" +
-            "        -76.299169,\n" +
-            "        40.042522\n" +
-            "      ]\n" +
-            "    },\n" +
-            "    {\n" +
-            "      \"name\": \"West Chocolate Avenue\",\n" +
-            "      \"location\": [\n" +
-            "        -76.654634,\n" +
-            "        40.283943\n" +
-            "      ]\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"code\": \"Ok\",\n" +
-            "  \"uuid\": \"cjeacbr8s21bk47lggcvce7lv\"\n" +
-            "}"
+        private const val REQUEST_ID = 19L
+        private const val SUCCESS_RESPONSE = """
+            {
+              "routes": [
+                {
+                  "geometry": "",
+                  "legs": [
+                    {
+                      "summary": "PA 283 West, Fishburn Road",
+                      "weight": 2383.1,
+                      "duration": 2248.5,
+                      "steps": [
+                        {
+                          "intersections": [
+                            {
+                              "out": 0,
+                              "entry": [
+                                true
+                              ],
+                              "bearings": [
+                                82
+                              ],
+                              "location": [
+                                -76.299169,
+                                40.042522
+                              ]
+                            },
+                            {
+                              "out": 0,
+                              "in": 1,
+                              "entry": [
+                                true,
+                                false,
+                                true
+                              ],
+                              "bearings": [
+                                75,
+                                255,
+                                345
+                              ],
+                              "location": [
+                                -76.298855,
+                                40.042556
+                              ]
+                            },
+                            {
+                              "out": 0,
+                              "in": 2,
+                              "entry": [
+                                true,
+                                true,
+                                false,
+                                true
+                              ],
+                              "bearings": [
+                                75,
+                                165,
+                                255,
+                                345
+                              ],
+                              "location": [
+                                -76.297812,
+                                40.042673
+                              ]
+                            }
+                          ],
+                          "driving_side": "right",
+                          "geometry": "s`_kkA`y|opCcAsReEcy@Eq@]oDa@gEEu@uKgwB",
+                          "mode": "driving",
+                          "maneuver": {
+                            "bearing_after": 82,
+                            "bearing_before": 0,
+                            "location": [
+                              -76.299169,
+                              40.042522
+                            ],
+                            "modifier": "left",
+                            "type": "depart",
+                            "instruction": "Head east on East Fulton Street"
+                          },
+                          "weight": 63.8,
+                          "duration": 50.8,
+                          "name": "East Fulton Street",
+                          "distance": 293.2,
+                          "voiceInstructions": [
+                            {
+                              "distanceAlongGeometry": 293.2,
+                              "announcement": "Head east on East Fulton Street, then turn right onto North Ann Street",
+                              "ssmlAnnouncement": "<speak><amazon:effect name=\"drc\"><prosody rate=\"1.08\">Head east on East Fulton Street, then turn right onto North Ann Street</prosody></amazon:effect></speak>"
+                            },
+                            {
+                              "distanceAlongGeometry": 86.6,
+                              "announcement": "Turn right onto North Ann Street, then turn left onto East Chestnut Street (PA 23 East)",
+                              "ssmlAnnouncement": "<speak><amazon:effect name=\"drc\"><prosody rate=\"1.08\">Turn right onto North Ann Street, then turn left onto East Chestnut Street (PA <say-as interpret-as=\"address\">23</say-as> East)</prosody></amazon:effect></speak>"
+                            }
+                          ],
+                          "bannerInstructions": [
+                            {
+                              "distanceAlongGeometry": 293.2,
+                              "primary": {
+                                "type": "turn",
+                                "modifier": "right",
+                                "components": [
+                                  {
+                                    "text": "North",
+                                    "type": "text",
+                                    "abbr": "N",
+                                    "abbr_priority": 1
+                                  },
+                                  {
+                                    "text": "Ann Street",
+                                    "type": "text",
+                                    "abbr": "Ann St",
+                                    "abbr_priority": 0
+                                  }
+                                ],
+                                "text": "North Ann Street"
+                              },
+                              "secondary": null
+                            }
+                          ]
+                        }
+                      ],
+                      "distance": 50369.7
+                    }
+                  ],
+                  "weight_name": "routability",
+                  "weight": 2383.1,
+                  "duration": 2248.5,
+                  "distance": 50369.7,
+                  "voiceLocale": "en-US"
+                }
+              ],
+              "waypoints": [
+                {
+                  "name": "East Fulton Street",
+                  "location": [
+                    -76.299169,
+                    40.042522
+                  ]
+                },
+                {
+                  "name": "West Chocolate Avenue",
+                  "location": [
+                    -76.654634,
+                    40.283943
+                  ]
+                }
+              ],
+              "code": "Ok",
+              "uuid": "cjeacbr8s21bk47lggcvce7lv"
+            }
+        """
     }
 }

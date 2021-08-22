@@ -19,11 +19,6 @@ import com.mapbox.navigation.base.trip.model.RouteLegProgress
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.BuildConfig
 import com.mapbox.navigation.core.MapboxNavigation
-import com.mapbox.navigation.core.NavigationSession
-import com.mapbox.navigation.core.NavigationSession.State.ACTIVE_GUIDANCE
-import com.mapbox.navigation.core.NavigationSession.State.FREE_DRIVE
-import com.mapbox.navigation.core.NavigationSession.State.IDLE
-import com.mapbox.navigation.core.NavigationSessionStateObserver
 import com.mapbox.navigation.core.arrival.ArrivalObserver
 import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.internal.accounts.MapboxNavigationAccounts
@@ -43,6 +38,11 @@ import com.mapbox.navigation.core.telemetry.events.NavigationFreeDriveEvent
 import com.mapbox.navigation.core.telemetry.events.NavigationRerouteEvent
 import com.mapbox.navigation.core.telemetry.events.PhoneState
 import com.mapbox.navigation.core.telemetry.events.TelemetryLocation
+import com.mapbox.navigation.core.trip.session.NavigationSessionState
+import com.mapbox.navigation.core.trip.session.NavigationSessionState.ActiveGuidance
+import com.mapbox.navigation.core.trip.session.NavigationSessionState.FreeDrive
+import com.mapbox.navigation.core.trip.session.NavigationSessionState.Idle
+import com.mapbox.navigation.core.trip.session.NavigationSessionStateObserver
 import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.metrics.MapboxMetricsReporter
@@ -50,6 +50,8 @@ import com.mapbox.navigation.metrics.internal.event.NavigationAppUserTurnstileEv
 import com.mapbox.navigation.utils.internal.Time
 import com.mapbox.navigation.utils.internal.ifNonNull
 import java.util.Date
+import kotlin.collections.LinkedHashMap
+import kotlin.collections.set
 
 private data class DynamicSessionValues(
     var rerouteCount: Int = 0,
@@ -93,19 +95,14 @@ private data class DynamicFreeDriveValues(
 The class must be initialized before any telemetry events are reported. Attempting to use telemetry before initialization is called will throw an exception. Initialization may be called multiple times, the call is idempotent.
 The class has two public methods, postUserFeedback() and initialize().
  */
-internal object MapboxNavigationTelemetry :
-    RouteProgressObserver,
-    RoutesObserver,
-    OffRouteObserver,
-    NavigationSessionStateObserver,
-    ArrivalObserver {
+internal object MapboxNavigationTelemetry {
     internal val TAG = Tag("MbxTelemetry")
 
     private const val ONE_SECOND = 1000
     private const val MOCK_PROVIDER = "com.mapbox.navigation.core.replay.ReplayLocationEngine"
     private const val EVENT_VERSION = 7
 
-    private lateinit var context: Context // Must be context.getApplicationContext
+    private lateinit var applicationContext: Context // Must be context.getApplicationContext
     private lateinit var metricsReporter: MetricsReporter
     private lateinit var navigationOptions: NavigationOptions
     private var lifecycleMonitor: ApplicationLifecycleMonitor? = null
@@ -130,10 +127,87 @@ internal object MapboxNavigationTelemetry :
     private val feedbackEventCacheMap = LinkedHashMap<String, NavigationFeedbackEvent>()
 
     private var needHandleReroute = false
-    private var sessionState: NavigationSession.State = IDLE
+    private var sessionState: NavigationSessionState = Idle
     private var routeProgress: RouteProgress? = null
     private var originalRoute: DirectionsRoute? = null
     private var needStartSession = false
+    private var eventsSessionId: String = ""
+
+    private val routesObserver = RoutesObserver { routes ->
+        log("onRoutesChanged. size = ${routes.size}")
+        routes.getOrNull(0)?.let {
+            if (sessionState is ActiveGuidance) {
+                if (originalRoute != null) {
+                    if (needHandleReroute) {
+                        needHandleReroute = false
+                        handleReroute(it)
+                    } else {
+                        log("handle ExternalRoute")
+                        sessionStop()
+                        originalRoute = it
+                        needStartSession = true
+                        startSessionIfNeedAndCan()
+                    }
+                } else {
+                    originalRoute = it
+                    needStartSession = true
+                    startSessionIfNeedAndCan()
+                }
+            } else {
+                originalRoute = it
+            }
+        }
+    }
+
+    private val arrivalObserver = object : ArrivalObserver {
+        override fun onNextRouteLegStart(routeLegProgress: RouteLegProgress) {
+            log("onNextRouteLegStart")
+            processArrival()
+            handleSessionCanceled()
+            sessionStart()
+        }
+
+        override fun onWaypointArrival(routeProgress: RouteProgress) {
+            log("onWaypointDestinationArrival")
+        }
+
+        override fun onFinalDestinationArrival(routeProgress: RouteProgress) {
+            log("onFinalDestinationArrival")
+            this@MapboxNavigationTelemetry.routeProgress = routeProgress
+            processArrival()
+        }
+    }
+
+    private val navigationSessionStateObserver = NavigationSessionStateObserver { sessionState ->
+        log("session state is $sessionState")
+        when (sessionState) {
+            is Idle, is FreeDrive -> {
+                eventsSessionId = this.sessionState.sessionId
+                sessionStop()
+                handleStateChanged(this.sessionState, sessionState)
+            }
+            is ActiveGuidance -> {
+                locationsCollector.flushBuffers()
+                handleStateChanged(this.sessionState, sessionState)
+                eventsSessionId = sessionState.sessionId
+                needStartSession = true
+                startSessionIfNeedAndCan()
+            }
+        }
+        this.sessionState = sessionState
+    }
+
+    private val offRouteObserver = OffRouteObserver { offRoute ->
+        log("onOffRouteStateChanged $offRoute")
+        if (offRoute) {
+            needHandleReroute = true
+        }
+    }
+
+    private val routeProgressObserver = RouteProgressObserver { routeProgress ->
+        this.routeProgress = routeProgress
+        startSessionIfNeedAndCan()
+    }
 
     /**
      * This method must be called before using the Telemetry object
@@ -143,15 +217,15 @@ internal object MapboxNavigationTelemetry :
         options: NavigationOptions,
         reporter: MetricsReporter,
         logger: Logger?,
-        locationsCollector: LocationsCollector = LocationsCollectorImpl(logger)
+        locationsCollector: LocationsCollector = LocationsCollectorImpl(logger),
     ) {
         reset()
         dynamicFreeDriveValues.reset()
-        sessionState = IDLE
+        sessionState = Idle
         this.logger = logger
         this.locationsCollector = locationsCollector
         navigationOptions = options
-        context = options.applicationContext
+        applicationContext = options.applicationContext
         locationEngineNameExternal = options.locationEngine.javaClass.name
         sdkIdentifier = if (options.isFromNavigationUi) {
             "mapbox-navigation-ui-android"
@@ -176,7 +250,6 @@ internal object MapboxNavigationTelemetry :
         @FeedbackEvent.Source feedbackSource: String,
         screenshot: String?,
         feedbackSubType: Array<String>?,
-        appMetadata: AppMetadata?
     ) {
         createUserFeedback(
             feedbackType,
@@ -184,7 +257,6 @@ internal object MapboxNavigationTelemetry :
             feedbackSource,
             screenshot,
             feedbackSubType,
-            appMetadata,
             null
         ) {
             sendMetricEvent(it)
@@ -197,7 +269,6 @@ internal object MapboxNavigationTelemetry :
         @FeedbackEvent.Source feedbackSource: String,
         screenshot: String?,
         feedbackSubType: Array<String>?,
-        appMetadata: AppMetadata?
     ) {
         createUserFeedback(
             feedbackType,
@@ -205,7 +276,6 @@ internal object MapboxNavigationTelemetry :
             feedbackSource,
             screenshot,
             feedbackSubType,
-            appMetadata,
             {
                 feedbackEventCacheMap[it.feedbackId] = it
             },
@@ -245,14 +315,13 @@ internal object MapboxNavigationTelemetry :
         @FeedbackEvent.Source feedbackSource: String,
         screenshot: String?,
         feedbackSubType: Array<String>?,
-        appMetadata: AppMetadata?,
         onEventCreated: ((NavigationFeedbackEvent) -> Unit)? = null,
         onEventUpdated: ((NavigationFeedbackEvent) -> Unit)? = null
     ) {
         if (dynamicValues.sessionStarted && dataInitialized()) {
             log("collect post event locations for user feedback")
             val feedbackEvent = NavigationFeedbackEvent(
-                PhoneState(context),
+                PhoneState(applicationContext),
                 MetricsRouteProgress(routeProgress)
             ).apply {
                 this.feedbackType = feedbackType
@@ -260,7 +329,6 @@ internal object MapboxNavigationTelemetry :
                 this.description = description
                 this.screenshot = screenshot
                 this.feedbackSubType = feedbackSubType
-                this.appMetadata = appMetadata
                 populate()
             }
 
@@ -288,71 +356,32 @@ internal object MapboxNavigationTelemetry :
     fun unregisterListeners(mapboxNavigation: MapboxNavigation) {
         mapboxNavigation.run {
             unregisterLocationObserver(locationsCollector)
-            unregisterRouteProgressObserver(this@MapboxNavigationTelemetry)
-            unregisterRoutesObserver(this@MapboxNavigationTelemetry)
-            unregisterOffRouteObserver(this@MapboxNavigationTelemetry)
-            unregisterNavigationSessionObserver(this@MapboxNavigationTelemetry)
-            unregisterArrivalObserver(this@MapboxNavigationTelemetry)
+            unregisterRouteProgressObserver(routeProgressObserver)
+            unregisterRoutesObserver(routesObserver)
+            unregisterOffRouteObserver(offRouteObserver)
+            unregisterNavigationSessionStateObserver(navigationSessionStateObserver)
+            unregisterArrivalObserver(arrivalObserver)
         }
         MapboxMetricsReporter.disable()
     }
 
-    override fun onRouteProgressChanged(routeProgress: RouteProgress) {
-        this.routeProgress = routeProgress
-        startSessionIfNeedAndCan()
-    }
-
-    override fun onRoutesChanged(routes: List<DirectionsRoute>) {
-        log("onRoutesChanged. size = ${routes.size}")
-        routes.getOrNull(0)?.let {
-            if (sessionState == ACTIVE_GUIDANCE) {
-                if (originalRoute != null) {
-                    if (needHandleReroute) {
-                        needHandleReroute = false
-                        handleReroute(it)
-                    } else {
-                        log("handle ExternalRoute")
-                        sessionStop()
-                        originalRoute = it
-                        needStartSession = true
-                        startSessionIfNeedAndCan()
-                    }
-                } else {
-                    originalRoute = it
-                    needStartSession = true
-                    startSessionIfNeedAndCan()
-                }
-            } else {
-                originalRoute = it
-            }
-        }
-    }
-
-    override fun onNavigationSessionStateChanged(navigationSession: NavigationSession.State) {
-        log("session state is $navigationSession")
-        when (navigationSession) {
-            IDLE, FREE_DRIVE -> {
-                sessionStop()
-                handleStateChanged(sessionState, navigationSession)
-            }
-            ACTIVE_GUIDANCE -> {
-                locationsCollector.flushBuffers()
-                handleStateChanged(sessionState, navigationSession)
-                needStartSession = true
-                startSessionIfNeedAndCan()
-            }
-        }
-        sessionState = navigationSession
-    }
-
     private fun handleStateChanged(
-        oldState: NavigationSession.State,
-        newState: NavigationSession.State
+        oldState: NavigationSessionState,
+        newState: NavigationSessionState
     ) {
         when {
-            oldState == FREE_DRIVE && newState == IDLE -> trackFreeDrive(STOP)
-            oldState == FREE_DRIVE && newState == ACTIVE_GUIDANCE -> trackFreeDrive(STOP)
-            oldState != FREE_DRIVE && newState == FREE_DRIVE -> trackFreeDrive(START)
+            oldState is FreeDrive && newState is Idle -> {
+                eventsSessionId = oldState.sessionId
+                trackFreeDrive(STOP)
+            }
+            oldState is FreeDrive && newState is ActiveGuidance -> {
+                eventsSessionId = oldState.sessionId
+                trackFreeDrive(STOP)
+            }
+            oldState !is FreeDrive && newState is FreeDrive -> {
+                eventsSessionId = newState.sessionId
+                trackFreeDrive(START)
+            }
         }
     }
 
@@ -379,7 +408,7 @@ internal object MapboxNavigationTelemetry :
     ) {
         log("createFreeDriveEvent $type")
         if (sessionId != null && sessionStartTime != null) {
-            val freeDriveEvent = NavigationFreeDriveEvent(PhoneState(context)).apply {
+            val freeDriveEvent = NavigationFreeDriveEvent(PhoneState(applicationContext)).apply {
                 populate(type, sessionId, sessionStartTime)
             }
             sendEvent(freeDriveEvent)
@@ -396,38 +425,14 @@ internal object MapboxNavigationTelemetry :
         metricsReporter.addEvent(metricEvent)
     }
 
-    override fun onOffRouteStateChanged(offRoute: Boolean) {
-        log("onOffRouteStateChanged $offRoute")
-        if (offRoute) {
-            needHandleReroute = true
-        }
-    }
-
-    override fun onNextRouteLegStart(routeLegProgress: RouteLegProgress) {
-        log("onNextRouteLegStart")
-        processArrival()
-        handleSessionCanceled()
-        sessionStart()
-    }
-
-    override fun onWaypointArrival(routeProgress: RouteProgress) {
-        log("onWaypointDestinationArrival")
-    }
-
-    override fun onFinalDestinationArrival(routeProgress: RouteProgress) {
-        log("onFinalDestinationArrival")
-        this.routeProgress = routeProgress
-        processArrival()
-    }
-
     private fun registerListeners(mapboxNavigation: MapboxNavigation) {
         mapboxNavigation.run {
             registerLocationObserver(locationsCollector)
-            registerRouteProgressObserver(this@MapboxNavigationTelemetry)
-            registerRoutesObserver(this@MapboxNavigationTelemetry)
-            registerOffRouteObserver(this@MapboxNavigationTelemetry)
-            registerNavigationSessionObserver(this@MapboxNavigationTelemetry)
-            registerArrivalObserver(this@MapboxNavigationTelemetry)
+            registerRouteProgressObserver(routeProgressObserver)
+            registerRoutesObserver(routesObserver)
+            registerOffRouteObserver(offRouteObserver)
+            registerNavigationSessionStateObserver(navigationSessionStateObserver)
+            registerArrivalObserver(arrivalObserver)
         }
     }
 
@@ -440,7 +445,8 @@ internal object MapboxNavigationTelemetry :
                 sessionStarted = true
             }
 
-            val departEvent = NavigationDepartEvent(PhoneState(context)).apply { populate() }
+            val departEvent =
+                NavigationDepartEvent(PhoneState(applicationContext)).apply { populate() }
             sendMetricEvent(departEvent)
         }
     }
@@ -483,7 +489,7 @@ internal object MapboxNavigationTelemetry :
             }
 
             val navigationRerouteEvent = NavigationRerouteEvent(
-                PhoneState(context),
+                PhoneState(applicationContext),
                 MetricsRouteProgress(routeProgress)
             ).apply {
                 secondsSinceLastReroute = dynamicValues.timeSinceLastReroute / ONE_SECOND
@@ -509,7 +515,8 @@ internal object MapboxNavigationTelemetry :
             log("handleSessionCanceled")
             locationsCollector.flushBuffers()
 
-            val cancelEvent = NavigationCancelEvent(PhoneState(context)).apply { populate() }
+            val cancelEvent =
+                NavigationCancelEvent(PhoneState(applicationContext)).apply { populate() }
             ifNonNull(dynamicValues.sessionArrivalTime) {
                 cancelEvent.arrivalTimestamp = generateCreateDateFormatted(it)
             }
@@ -531,7 +538,8 @@ internal object MapboxNavigationTelemetry :
             log("you have arrived")
             dynamicValues.sessionArrivalTime = Date()
 
-            val arriveEvent = NavigationArriveEvent(PhoneState(context)).apply { populate() }
+            val arriveEvent =
+                NavigationArriveEvent(PhoneState(applicationContext)).apply { populate() }
             sendMetricEvent(arriveEvent)
         }
     }
@@ -552,7 +560,7 @@ internal object MapboxNavigationTelemetry :
                 routeProgress.route.let {
                     geometry = it.geometry()
                     profile = it.routeOptions()?.profile()
-                    requestIdentifier = it.routeOptions()?.requestUuid()
+                    requestIdentifier = it.requestUuid()
                     stepCount = obtainStepCount(it)
                     legIndex = it.routeIndex()?.toInt() ?: 0
                     legCount = it.legs()?.size ?: 0
@@ -571,7 +579,7 @@ internal object MapboxNavigationTelemetry :
                 originalStepCount = obtainStepCount(it)
                 originalEstimatedDistance = it.distance().toInt()
                 originalEstimatedDuration = it.duration().toInt()
-                originalRequestIdentifier = it.routeOptions()?.requestUuid()
+                originalRequestIdentifier = it.requestUuid()
                 originalGeometry = it.geometry()
             }
 
@@ -590,6 +598,7 @@ internal object MapboxNavigationTelemetry :
             }
 
             eventVersion = EVENT_VERSION
+            appMetadata = createAppMetadata()
         }
     }
 
@@ -610,7 +619,14 @@ internal object MapboxNavigationTelemetry :
             simulation = locationEngineNameExternal == MOCK_PROVIDER
             sessionIdentifier = sessionId
             startTimestamp = generateCreateDateFormatted(sessionStartTime)
+            appMetadata = createAppMetadata()
         }
+    }
+
+    private fun createAppMetadata(): AppMetadata? {
+        navigationOptions.eventsAppMetadata?.let {
+            return AppMetadata(it.name, it.version, it.userId, eventsSessionId)
+        } ?: return null
     }
 
     private fun reset() {

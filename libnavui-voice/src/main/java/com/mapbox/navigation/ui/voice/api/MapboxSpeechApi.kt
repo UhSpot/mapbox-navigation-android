@@ -15,8 +15,8 @@ import com.mapbox.navigation.ui.voice.model.VoiceState
 import com.mapbox.navigation.ui.voice.options.MapboxSpeechApiOptions
 import com.mapbox.navigation.utils.internal.JobControl
 import com.mapbox.navigation.utils.internal.ThreadController
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * Mapbox Speech Api that allows you to generate an announcement based on [VoiceInstructions]
@@ -33,7 +33,6 @@ class MapboxSpeechApi @JvmOverloads constructor(
 ) {
 
     private val mainJobController: JobControl by lazy { ThreadController.getMainScopeAndRootJob() }
-    private var currentVoiceFileJob: Job? = null
     private val voiceAPI = VoiceApiProvider.retrieveMapboxVoiceApi(
         context,
         accessToken,
@@ -55,8 +54,7 @@ class MapboxSpeechApi @JvmOverloads constructor(
         voiceInstruction: VoiceInstructions,
         consumer: MapboxNavigationConsumer<Expected<SpeechError, SpeechValue>>
     ) {
-        currentVoiceFileJob?.cancel()
-        currentVoiceFileJob = mainJobController.scope.launch {
+        mainJobController.scope.launch {
             retrieveVoiceFile(voiceInstruction, consumer)
         }
     }
@@ -67,7 +65,9 @@ class MapboxSpeechApi @JvmOverloads constructor(
      * @see [generate]
      */
     fun cancel() {
-        currentVoiceFileJob?.cancel()
+        mainJobController.job.children.forEach {
+            it.cancel()
+        }
     }
 
     /**
@@ -127,9 +127,7 @@ class MapboxSpeechApi @JvmOverloads constructor(
     ) {
         val checkVoiceInstructionsResult =
             VoiceProcessor.process(VoiceAction.PrepareTypeAndAnnouncement(voiceInstruction))
-        val typeAndAnnouncement =
-            checkVoiceInstructionsResult as VoiceResult.VoiceTypeAndAnnouncement
-        when (typeAndAnnouncement) {
+        when (checkVoiceInstructionsResult as VoiceResult.VoiceTypeAndAnnouncement) {
             is VoiceResult.VoiceTypeAndAnnouncement.Success -> {
                 val announcement = voiceInstruction.announcement()
                 val ssmlAnnouncement = voiceInstruction.ssmlAnnouncement()

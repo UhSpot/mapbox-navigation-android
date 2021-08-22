@@ -64,12 +64,20 @@ class NavigationOptionsTest : BuilderTest<NavigationOptions, NavigationOptions.B
             )
             .navigatorPredictionMillis(1)
             .routingTilesOptions(mockk())
-            .predictiveCacheLocationOptions(mockk())
             .timeFormatType(1)
             .eHorizonOptions(mockk())
             .routeRefreshOptions(mockk())
             .routeAlternativesOptions(mockk())
             .incidentsOptions(mockk())
+            .historyRecorderOptions(
+                HistoryRecorderOptions.Builder()
+                    .fileDirectory("history/path")
+                    .build()
+            )
+            .eventsAppMetadata(
+                EventsAppMetadata.Builder("name", "version")
+                    .build()
+            )
     }
 
     @Test

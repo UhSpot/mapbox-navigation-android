@@ -24,7 +24,9 @@ import com.mapbox.maps.plugin.animation.CameraAnimationsPlugin
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.locationcomponent.LocationComponentPlugin
 import com.mapbox.maps.plugin.locationcomponent.location
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.examples.core.R
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.clearRouteLine
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.setRoutes
@@ -79,13 +81,12 @@ class RouteDrawingActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.layout_route_drawing_activity)
-        val tileStore = TileStore.getInstance()
+        val tileStore = TileStore.create()
         val mapboxMapOptions = MapInitOptions(this)
         val resourceOptions = ResourceOptions.Builder()
             .accessToken(getMapboxAccessTokenFromResources())
             .assetPath(filesDir.absolutePath)
-            .cachePath(filesDir.absolutePath + "/mbx.db")
-            .cacheSize(100000000L) // 100 MB
+            .dataPath(filesDir.absolutePath + "/mbx.db")
             .tileStore(tileStore)
             .build()
         mapboxMapOptions.resourceOptions = resourceOptions
@@ -144,8 +145,8 @@ class RouteDrawingActivity : AppCompatActivity() {
         }
     }
 
-    private val routeRequestCallback: RoutesRequestCallback = object : RoutesRequestCallback {
-        override fun onRoutesReady(routes: List<DirectionsRoute>) {
+    private val routeRequestCallback: RouterCallback = object : RouterCallback {
+        override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
             val routeLines = routes.map { RouteLine(it, null) }
             CoroutineScope(Dispatchers.Main).launch {
                 routeLineApi.setRoutes(routeLines).apply {
@@ -154,11 +155,15 @@ class RouteDrawingActivity : AppCompatActivity() {
             }
         }
 
-        override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
-            Toast.makeText(this@RouteDrawingActivity, throwable.message, Toast.LENGTH_SHORT).show()
+        override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+            Toast.makeText(
+                this@RouteDrawingActivity,
+                reasons.firstOrNull()?.message,
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
-        override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+        override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
             Toast.makeText(
                 this@RouteDrawingActivity,
                 "Fetch Route Cancelled",

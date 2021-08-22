@@ -35,13 +35,15 @@ import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.locationcomponent.LocationComponentPlugin
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
-import com.mapbox.navigation.base.ExperimentalMapboxNavigationAPI
+import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.options.NavigationOptions
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesObserver
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayRouteMapper
@@ -108,10 +110,10 @@ class MapboxCameraAnimationsActivity :
     }
 
     private val paddedFollowingEdgeInsets = EdgeInsets(
-        0.0 * pixelDensity,
-        40.0 * pixelDensity,
+        0.0,
+        0.0,
         120.0 * pixelDensity,
-        40.0 * pixelDensity
+        0.0
     )
 
     private val notPaddedEdgeInsets: EdgeInsets by lazy {
@@ -181,7 +183,11 @@ class MapboxCameraAnimationsActivity :
         viewportDataSource.onRouteProgressChanged(routeProgress)
         viewportDataSource.evaluate()
 
-        routeLineAPI?.updateWithRouteProgress(routeProgress)
+        routeLineAPI?.updateWithRouteProgress(routeProgress) { result ->
+            mapboxMap.getStyle()?.apply {
+                routeLineView?.renderRouteLineUpdate(this, result)
+            }
+        }
 
         routeArrowAPI.addUpcomingManeuverArrow(routeProgress).apply {
             ifNonNull(routeArrowView, mapboxMap.getStyle()) { view, style ->
@@ -226,12 +232,12 @@ class MapboxCameraAnimationsActivity :
         OnIndicatorPositionChangedListener { point ->
             routeLineAPI?.updateTraveledRouteLine(point)?.apply {
                 ifNonNull(routeLineView, mapboxMap.getStyle()) { view, style ->
-                    view.renderVanishingRouteLineUpdateValue(style, this)
+                    view.renderRouteLineUpdate(style, this)
                 }
             }
         }
 
-    @OptIn(ExperimentalMapboxNavigationAPI::class)
+    @OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = LayoutActivityCameraBinding.inflate(layoutInflater)
@@ -555,25 +561,27 @@ class MapboxCameraAnimationsActivity :
         val routeOptions: RouteOptions = RouteOptions.builder()
             .applyDefaultNavigationOptions()
             .applyLanguageAndVoiceUnitOptions(this)
-            .accessToken(getMapboxAccessTokenFromResources())
-            .coordinates(listOf(origin, destination))
+            .coordinatesList(listOf(origin, destination))
             .build()
 
         mapboxNavigation.requestRoutes(
             routeOptions,
-            object : RoutesRequestCallback {
-                override fun onRoutesReady(routes: List<DirectionsRoute>) {
+            object : RouterCallback {
+                override fun onRoutesReady(
+                    routes: List<DirectionsRoute>,
+                    routerOrigin: RouterOrigin
+                ) {
                     mapboxNavigation.setRoutes(routes)
                 }
 
-                override fun onRoutesRequestFailure(
-                    throwable: Throwable,
+                override fun onFailure(
+                    reasons: List<RouterFailure>,
                     routeOptions: RouteOptions
                 ) {
                     // no impl
                 }
 
-                override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                     // no impl
                 }
             }

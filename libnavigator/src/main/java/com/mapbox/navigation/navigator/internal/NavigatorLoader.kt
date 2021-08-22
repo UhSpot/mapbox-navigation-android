@@ -1,11 +1,15 @@
 package com.mapbox.navigation.navigator.internal
 
+import com.mapbox.base.common.logger.model.Message
+import com.mapbox.base.common.logger.model.Tag
 import com.mapbox.navigation.base.options.DeviceProfile
 import com.mapbox.navigation.base.options.DeviceType
 import com.mapbox.navigation.navigator.internal.NavigatorLoader.customConfig
+import com.mapbox.navigation.utils.internal.LoggerProvider
 import com.mapbox.navigator.CacheFactory
 import com.mapbox.navigator.CacheHandle
 import com.mapbox.navigator.ConfigFactory
+import com.mapbox.navigator.ConfigHandle
 import com.mapbox.navigator.GraphAccessor
 import com.mapbox.navigator.HistoryRecorderHandle
 import com.mapbox.navigator.Navigator
@@ -14,7 +18,6 @@ import com.mapbox.navigator.ProfileApplication
 import com.mapbox.navigator.ProfilePlatform
 import com.mapbox.navigator.RoadObjectMatcher
 import com.mapbox.navigator.Router
-import com.mapbox.navigator.RunLoopExecutorFactory
 import com.mapbox.navigator.SettingsProfile
 import com.mapbox.navigator.TilesConfig
 
@@ -27,20 +30,18 @@ internal object NavigatorLoader {
     fun createNavigator(
         deviceProfile: DeviceProfile,
         navigatorConfig: NavigatorConfig,
-        tilesConfig: TilesConfig
+        tilesConfig: TilesConfig,
+        historyDir: String?
     ): NativeComponents {
         val config = ConfigFactory.build(
             settingsProfile(deviceProfile),
             navigatorConfig,
             deviceProfile.customConfig
         )
-        val runLoopExecutor = RunLoopExecutorFactory.build()
-        val historyRecorder = HistoryRecorderHandle.build("", config)
-        val cache = CacheFactory.build(tilesConfig, config, runLoopExecutor, historyRecorder)
-
+        val historyRecorder = buildHistoryRecorder(historyDir, config)
+        val cache = CacheFactory.build(tilesConfig, config, historyRecorder)
         val navigator = Navigator(
             config,
-            runLoopExecutor,
             cache,
             historyRecorder
         )
@@ -56,6 +57,24 @@ internal object NavigatorLoader {
             cache,
             roadObjectMatcher
         )
+    }
+
+    private fun buildHistoryRecorder(
+        historyDir: String?,
+        config: ConfigHandle
+    ): HistoryRecorderHandle? {
+        return if (historyDir != null) {
+            val historyRecorderHandle = HistoryRecorderHandle.build(historyDir, config)
+            if (historyRecorderHandle == null) {
+                LoggerProvider.logger.e(
+                    Tag("MbxHistoryRecorder"),
+                    Message("Could not create directory directory to write events")
+                )
+            }
+            historyRecorderHandle
+        } else {
+            null
+        }
     }
 
     private fun settingsProfile(deviceProfile: DeviceProfile): SettingsProfile {
@@ -77,7 +96,7 @@ internal object NavigatorLoader {
     internal data class NativeComponents(
         val navigator: Navigator,
         val nativeRouter: Router,
-        val historyRecorderHandle: HistoryRecorderHandle,
+        val historyRecorderHandle: HistoryRecorderHandle?,
         val graphAccessor: GraphAccessor,
         val cache: CacheHandle,
         val roadObjectMatcher: RoadObjectMatcher,

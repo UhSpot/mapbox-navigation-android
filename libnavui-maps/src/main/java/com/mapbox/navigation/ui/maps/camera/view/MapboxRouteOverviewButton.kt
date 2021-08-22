@@ -12,8 +12,8 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.mapbox.navigation.ui.maps.R
 import com.mapbox.navigation.ui.maps.databinding.MapboxRouteOverviewLayoutBinding
 import com.mapbox.navigation.ui.utils.internal.extensions.afterMeasured
-import com.mapbox.navigation.ui.utils.internal.extensions.extend
-import com.mapbox.navigation.ui.utils.internal.extensions.shrink
+import com.mapbox.navigation.ui.utils.internal.extensions.measureTextWidth
+import com.mapbox.navigation.ui.utils.internal.extensions.play
 import com.mapbox.navigation.ui.utils.internal.extensions.slideWidth
 
 /**
@@ -21,7 +21,7 @@ import com.mapbox.navigation.ui.utils.internal.extensions.slideWidth
  */
 class MapboxRouteOverviewButton : ConstraintLayout {
 
-    private var textWidth = 0
+    private var shrunkWidth = 0
     private var isAnimationRunning = false
     private val binding = MapboxRouteOverviewLayoutBinding.inflate(
         LayoutInflater.from(context),
@@ -64,7 +64,7 @@ class MapboxRouteOverviewButton : ConstraintLayout {
     override fun onFinishInflate() {
         super.onFinishInflate()
         binding.routeOverviewText.afterMeasured {
-            textWidth = width
+            shrunkWidth = width
         }
     }
 
@@ -84,23 +84,24 @@ class MapboxRouteOverviewButton : ConstraintLayout {
     /**
      * Invoke the function to show optional text associated with the view.
      * @param duration for the view to be in the extended mode before it starts to shrink.
+     * @param text for the view to show in the extended mode.
      */
-    fun showTextAndExtend(duration: Long) {
+    @JvmOverloads
+    fun showTextAndExtend(
+        duration: Long,
+        text: String = context.getString(R.string.mapbox_route_overview),
+    ) {
         if (!isAnimationRunning) {
             isAnimationRunning = true
-            val extendToWidth = EXTEND_TO_WIDTH * context.resources.displayMetrics.density
-            val animator = getAnimator(textWidth, extendToWidth.toInt())
-            binding.routeOverviewText.extend(
-                animator,
+            val extendedWidth = (binding.routeOverviewText.measureTextWidth(text) + shrunkWidth)
+                .coerceAtLeast(MIN_EXTENDED_WIDTH * context.resources.displayMetrics.density)
+            getAnimator(shrunkWidth, extendedWidth.toInt()).play(
                 doOnStart = {
-                    binding.routeOverviewText.text =
-                        context.getString(R.string.mapbox_route_overview)
+                    binding.routeOverviewText.text = text
                     binding.routeOverviewText.visibility = View.VISIBLE
                     mainHandler.postDelayed(
                         {
-                            val endAnimator = getAnimator(extendToWidth.toInt(), textWidth)
-                            binding.routeOverviewText.shrink(
-                                endAnimator,
+                            getAnimator(extendedWidth.toInt(), shrunkWidth).play(
                                 doOnStart = {
                                     binding.routeOverviewText.text = null
                                 },
@@ -132,13 +133,24 @@ class MapboxRouteOverviewButton : ConstraintLayout {
         typedArray.getDrawable(
             R.styleable.MapboxRouteOverviewButton_overviewButtonDrawable
         ).also { binding.routeOverviewIcon.setImageDrawable(it) }
+
+        typedArray.getDrawable(
+            R.styleable.MapboxRouteOverviewButton_overviewButtonBackground,
+        )?.let { background ->
+            binding.routeOverviewIcon.background = background
+            binding.routeOverviewText.background = background
+        }
+
+        typedArray.getColorStateList(
+            R.styleable.MapboxRouteOverviewButton_overviewButtonTextColor,
+        )?.let { binding.routeOverviewText.setTextColor(it) }
     }
 
     private fun getAnimator(from: Int, to: Int) =
         binding.routeOverviewText.slideWidth(from, to, SLIDE_DURATION)
 
     private companion object {
-        const val SLIDE_DURATION = 300L
-        const val EXTEND_TO_WIDTH = 165
+        private const val SLIDE_DURATION = 300L
+        private const val MIN_EXTENDED_WIDTH = 165
     }
 }

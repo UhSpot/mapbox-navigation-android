@@ -7,6 +7,7 @@ package com.mapbox.navigation.base.trip.model.eh
  * The value is in degrees in the range [0, 360)
  * @param length the Edge's length in meters
  * @param functionRoadClass the edge's [RoadClass]
+ * @param speedLimit max speed of the edge (speed limit) in m/s
  * @param speed average speed along the edge in m/s
  * @param ramp is the edge a ramp?
  * @param motorway is the edge a motorway?
@@ -14,17 +15,16 @@ package com.mapbox.navigation.base.trip.model.eh
  * @param tunnel is the edge a tunnel?
  * @param toll is the edge a toll road?
  * @param names an array of road names
- * @param curvature binned number denoting the curvature degree of the edge (0-15)
- * @param geometry optional geometry if requested
- * @param speedLimit max speed of the edge (speed limit) in m/s
  * @param laneCount the number of lanes on the edge (does not change mid-edge)
  * @param meanElevation mean elevation along the edge in meters
+ * @param curvature binned number denoting the curvature degree of the edge (0-15)
  * @param countryCodeIso3 ISO 3166-1 alpha-3 country code
  * @param countryCodeIso2 the edge's country code (ISO-2 format)
  * @param stateCode a state inside a country (ISO 3166-2)
  * @param isRightHandTraffic true if in the current place/state right-hand traffic is used
  * @param isOneWay true if current edge is one-way.
  * false if left-hand.
+ * @param roadSurface type of the road surface.
  */
 class EHorizonEdgeMetadata internal constructor(
     val heading: Double,
@@ -46,6 +46,7 @@ class EHorizonEdgeMetadata internal constructor(
     val stateCode: String?,
     val isRightHandTraffic: Boolean,
     val isOneWay: Boolean,
+    @RoadSurface.Type val roadSurface: String
 ) {
 
     /**
@@ -76,6 +77,7 @@ class EHorizonEdgeMetadata internal constructor(
         if (stateCode != other.stateCode) return false
         if (isRightHandTraffic != other.isRightHandTraffic) return false
         if (isOneWay != other.isOneWay) return false
+        if (roadSurface != other.roadSurface) return false
 
         return true
     }
@@ -103,6 +105,7 @@ class EHorizonEdgeMetadata internal constructor(
         result = 31 * result + (stateCode?.hashCode() ?: 0)
         result = 31 * result + isRightHandTraffic.hashCode()
         result = 31 * result + isOneWay.hashCode()
+        result = 31 * result + roadSurface.hashCode()
         return result
     }
 
@@ -129,7 +132,8 @@ class EHorizonEdgeMetadata internal constructor(
             "countryCodeIso2=$countryCodeIso2, " +
             "stateCode=$stateCode, " +
             "isRightHandTraffic=$isRightHandTraffic, " +
-            "isOneWay=$isOneWay" +
+            "isOneWay=$isOneWay, " +
+            "roadSurface=$roadSurface" +
             ")"
     }
 }

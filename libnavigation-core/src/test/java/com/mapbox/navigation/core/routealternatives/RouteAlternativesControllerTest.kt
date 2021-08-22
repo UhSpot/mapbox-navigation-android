@@ -3,8 +3,9 @@ package com.mapbox.navigation.core.routealternatives
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.navigation.base.route.RouteAlternativesOptions
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.directions.session.DirectionsSession
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.routeoptions.RouteOptionsUpdater
 import com.mapbox.navigation.core.trip.session.TripSession
 import com.mapbox.navigation.core.trip.session.TripSessionState
@@ -36,15 +37,14 @@ class RouteAlternativesControllerTest {
     private val navigator: MapboxNativeNavigator = mockk()
     private val directionsSession: DirectionsSession = mockk() {
         every { cancelRouteRequest(any()) } just Runs
-        every { routes } returns emptyList()
     }
     private val tripSession: TripSession = mockk {
         every { getRouteProgress() } returns mockk()
     }
     private val routeAlternativesObserver: RouteAlternativesObserver = mockk {
-        every { onRouteAlternatives(any(), any()) } returns Unit
+        every { onRouteAlternatives(any(), any(), any()) } returns Unit
     }
-    private val routesRequestCallbacks = slot<RoutesRequestCallback>()
+    private val routesRequestCallbacks = slot<RouterCallback>()
     private val routeOptionsUpdater: RouteOptionsUpdater = mockk()
 
     private val routeOptionsResultSuccess: RouteOptionsUpdater.RouteOptionsResult.Success = mockk()
@@ -213,6 +213,30 @@ class RouteAlternativesControllerTest {
     }
 
     @Test
+    fun `should not request when interrupted and there are no observers`() =
+        coroutineRule.runBlockingTest {
+            every { tripSession.getState() } returns TripSessionState.STARTED
+            mockRouteOptionsProvider(routeOptionsResultSuccess)
+            every { directionsSession.routes } returns listOf(
+                mockk {
+                    every { routeIndex() } returns "0"
+                    every { duration() } returns 1727.228
+                }
+            )
+            every { tripSession.getEnhancedLocation() } returns mockk {
+                every { latitude } returns -33.874308
+                every { longitude } returns 151.206087
+            }
+
+            val controller = mockController()
+            controller.interrupt()
+            coroutineRule.testDispatcher.advanceTimeBy(TimeUnit.MINUTES.toMillis(5))
+
+            verify(exactly = 0) { directionsSession.requestRoutes(any(), any()) }
+            coroutineRule.testDispatcher.cleanupTestCoroutines()
+        }
+
+    @Test
     fun `should notify observer of an alternative`() = coroutineRule.runBlockingTest {
         every { tripSession.getState() } returns TripSessionState.STARTED
         coEvery { navigator.isDifferentRoute(any()) } returns true
@@ -240,10 +264,11 @@ class RouteAlternativesControllerTest {
                 every { routeIndex() } returns "0"
             }
         )
-        routesRequestCallbacks.captured.onRoutesReady(routes)
+        val origin = mockk<RouterOrigin>()
+        routesRequestCallbacks.captured.onRoutesReady(routes, origin)
 
         verify(exactly = 1) {
-            routeAlternativesObserver.onRouteAlternatives(any(), routes)
+            routeAlternativesObserver.onRouteAlternatives(any(), routes, origin)
         }
 
         controller.unregisterAll()
@@ -269,14 +294,15 @@ class RouteAlternativesControllerTest {
                 capture(routesRequestCallbacks)
             )
         } returns 1L
+        val origin = mockk<RouterOrigin>()
 
         val controller = mockController()
         controller.register(routeAlternativesObserver)
         coroutineRule.testDispatcher.advanceTimeBy(TimeUnit.MINUTES.toMillis(6))
-        routesRequestCallbacks.captured.onRoutesReady(emptyList())
+        routesRequestCallbacks.captured.onRoutesReady(emptyList(), origin)
 
         verify(exactly = 1) {
-            routeAlternativesObserver.onRouteAlternatives(any(), emptyList())
+            routeAlternativesObserver.onRouteAlternatives(any(), emptyList(), origin)
         }
 
         controller.unregisterAll()

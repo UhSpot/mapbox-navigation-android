@@ -9,7 +9,7 @@ import com.mapbox.maps.MapboxMap
 import com.mapbox.maps.plugin.animation.CameraAnimationsLifecycleListener
 import com.mapbox.maps.plugin.animation.CameraAnimationsPlugin
 import com.mapbox.maps.plugin.animation.animator.CameraAnimator
-import com.mapbox.navigation.base.ExperimentalMapboxNavigationAPI
+import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.data.ViewportData
 import com.mapbox.navigation.ui.maps.camera.data.ViewportDataSource
@@ -146,14 +146,14 @@ class NavigationCamera(
     /**
      * Set a [MapboxNavigationViewportDataSourceDebugger].
      */
-    @ExperimentalMapboxNavigationAPI
+    @ExperimentalPreviewMapboxNavigationAPI
     var debugger: MapboxNavigationViewportDataSourceDebugger? = null
 
-    private val sourceUpdateObserver = object : ViewportDataSourceUpdateObserver {
-        override fun viewportDataSourceUpdated(viewportData: ViewportData) {
+    private val sourceUpdateObserver =
+        ViewportDataSourceUpdateObserver {
+            viewportData ->
             updateFrame(viewportData, instant = false)
         }
-    }
 
     init {
         viewportDataSource.registerUpdateObserver(sourceUpdateObserver)
@@ -314,9 +314,8 @@ class NavigationCamera(
      */
     fun requestNavigationCameraToIdle() {
         if (state != IDLE) {
-            this@NavigationCamera.frameTransitionOptions = DEFAULT_FRAME_TRANSITION_OPT
             cancelAnimation()
-            state = IDLE
+            setIdleProperties()
         }
     }
 
@@ -379,6 +378,11 @@ class NavigationCamera(
         navigationCameraStateChangedObservers.remove(navigationCameraStateChangedObserver)
     }
 
+    private fun setIdleProperties() {
+        this@NavigationCamera.frameTransitionOptions = DEFAULT_FRAME_TRANSITION_OPT
+        state = IDLE
+    }
+
     private fun cancelAnimation() {
         runningAnimation?.let { set ->
             set.cancel()
@@ -431,13 +435,10 @@ class NavigationCamera(
 
         override fun onAnimationEnd(animation: Animator?) {
             if (isCanceled) {
-                requestNavigationCameraToIdle()
+                setIdleProperties()
             } else {
-                state = finalState
-            }
-
-            if (!isCanceled) {
                 this@NavigationCamera.frameTransitionOptions = frameTransitionOptions
+                state = finalState
             }
 
             finishAnimation(animation as AnimatorSet)
@@ -476,7 +477,7 @@ class NavigationCamera(
         }
     }
 
-    @OptIn(ExperimentalMapboxNavigationAPI::class)
+    @OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
     private fun updateDebugger() {
         debugger?.cameraState = state
     }

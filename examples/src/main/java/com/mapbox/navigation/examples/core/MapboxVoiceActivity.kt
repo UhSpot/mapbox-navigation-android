@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.api.directions.v5.models.VoiceInstructions
 import com.mapbox.bindgen.Expected
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
@@ -22,10 +21,11 @@ import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.options.NavigationOptions
-import com.mapbox.navigation.base.trip.model.RouteProgress
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesObserver
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
@@ -131,11 +131,7 @@ class MapboxVoiceActivity : AppCompatActivity(), OnMapLongClickListener {
      * containing [SpeechAnnouncement].
      */
     private val voiceInstructionsPlayerCallback =
-        object : MapboxNavigationConsumer<SpeechAnnouncement> {
-            override fun accept(value: SpeechAnnouncement) {
-                speechApi.clean(value)
-            }
-        }
+        MapboxNavigationConsumer<SpeechAnnouncement> { value -> speechApi.clean(value) }
 
     /**
      * The result of invoking [MapboxSpeechApi.generate] is returned as a callback
@@ -166,18 +162,6 @@ class MapboxVoiceActivity : AppCompatActivity(), OnMapLongClickListener {
 
     private val replayProgressObserver = ReplayProgressObserver(mapboxReplayer)
 
-    private val soundButtonCallback = MapboxNavigationConsumer<Boolean> { value ->
-        isMuted = value.also {
-            if (it) {
-                // This is used to set the speech volume to mute.
-                voiceInstructionsPlayer.volume(SpeechVolume(0.0f))
-            } else {
-                // This is used to set the speech volume to max
-                voiceInstructionsPlayer.volume(SpeechVolume(1.0f))
-            }
-        }
-    }
-
     private val locationObserver = object : LocationObserver {
         override fun onRawLocationChanged(rawLocation: Location) {}
         override fun onEnhancedLocationChanged(
@@ -192,46 +176,38 @@ class MapboxVoiceActivity : AppCompatActivity(), OnMapLongClickListener {
         }
     }
 
-    private val routeProgressObserver = object : RouteProgressObserver {
-        override fun onRouteProgressChanged(routeProgress: RouteProgress) {
-            routeArrowApi.addUpcomingManeuverArrow(routeProgress).apply {
-                ifNonNull(routeArrowView, mapboxMap.getStyle()) { view, style ->
-                    view.renderManeuverUpdate(style, this)
-                }
+    private val routeProgressObserver = RouteProgressObserver { routeProgress ->
+        routeArrowApi.addUpcomingManeuverArrow(routeProgress).apply {
+            ifNonNull(routeArrowView, mapboxMap.getStyle()) { view, style ->
+                view.renderManeuverUpdate(style, this)
             }
         }
     }
 
-    private val voiceInstructionsObserver = object : VoiceInstructionsObserver {
-        override fun onNewVoiceInstructions(voiceInstructions: VoiceInstructions) {
-            // The data obtained must be used to generate the synthesized speech mp3 file.
-            speechApi.generate(
-                voiceInstructions,
-                speechCallback
-            )
-        }
+    private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions -> // The data obtained must be used to generate the synthesized speech mp3 file.
+        speechApi.generate(
+            voiceInstructions,
+            speechCallback
+        )
     }
 
-    private val routesObserver = object : RoutesObserver {
-        override fun onRoutesChanged(routes: List<DirectionsRoute>) {
-            // Every time a new route is obtained make sure to cancel the [MapboxSpeechApi] and
-            // clear the [MapboxVoiceInstructionsPlayer]
-            speechApi.cancel()
-            voiceInstructionsPlayer.clear()
-            if (routes.isNotEmpty()) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    routeLineApi.setRoutes(
-                        listOf(RouteLine(routes[0], null))
-                    ).apply {
-                        routeLineView.renderRouteDrawData(mapboxMap.getStyle()!!, this)
-                    }
+    private val routesObserver = RoutesObserver { routes -> // Every time a new route is obtained make sure to cancel the [MapboxSpeechApi] and
+        // clear the [MapboxVoiceInstructionsPlayer]
+        speechApi.cancel()
+        voiceInstructionsPlayer.clear()
+        if (routes.isNotEmpty()) {
+            CoroutineScope(Dispatchers.Main).launch {
+                routeLineApi.setRoutes(
+                    listOf(RouteLine(routes[0], null))
+                ).apply {
+                    routeLineView.renderRouteDrawData(mapboxMap.getStyle()!!, this)
                 }
-                startSimulation(routes[0])
             }
+            startSimulation(routes[0])
         }
     }
 
-    companion object {
+    private companion object {
         private const val SOUND_BUTTON_TEXT_APPEAR_DURATION = 1000L
     }
 
@@ -281,13 +257,23 @@ class MapboxVoiceActivity : AppCompatActivity(), OnMapLongClickListener {
     }
 
     private fun soundButtonMake(mute: Boolean) {
-        if (mute) {
-            binding.soundButton
-                .muteAndExtend(SOUND_BUTTON_TEXT_APPEAR_DURATION, soundButtonCallback)
+        val muted = if (mute) {
+            binding.soundButton.muteAndExtend(SOUND_BUTTON_TEXT_APPEAR_DURATION)
         } else {
-            binding.soundButton
-                .unmuteAndExtend(SOUND_BUTTON_TEXT_APPEAR_DURATION, soundButtonCallback)
+            binding.soundButton.unmuteAndExtend(SOUND_BUTTON_TEXT_APPEAR_DURATION)
         }
+        handleSoundState(muted)
+    }
+
+    private fun handleSoundState(value: Boolean) {
+        if (value) {
+            // This is used to set the speech volume to mute.
+            voiceInstructionsPlayer.volume(SpeechVolume(0.0f))
+        } else {
+            // This is used to set the speech volume to max
+            voiceInstructionsPlayer.volume(SpeechVolume(1.0f))
+        }
+        isMuted = value
     }
 
     private fun getMapboxAccessTokenFromResources(): String {
@@ -308,25 +294,27 @@ class MapboxVoiceActivity : AppCompatActivity(), OnMapLongClickListener {
         val routeOptions: RouteOptions = RouteOptions.builder()
             .applyDefaultNavigationOptions()
             .applyLanguageAndVoiceUnitOptions(this)
-            .accessToken(getMapboxAccessTokenFromResources())
-            .coordinates(listOf(origin, destination))
+            .coordinatesList(listOf(origin, destination))
             .voiceInstructions(true)
             .build()
         mapboxNavigation.requestRoutes(
             routeOptions,
-            object : RoutesRequestCallback {
-                override fun onRoutesReady(routes: List<DirectionsRoute>) {
+            object : RouterCallback {
+                override fun onRoutesReady(
+                    routes: List<DirectionsRoute>,
+                    routerOrigin: RouterOrigin
+                ) {
                     mapboxNavigation.setRoutes(routes)
                 }
 
-                override fun onRoutesRequestFailure(
-                    throwable: Throwable,
+                override fun onFailure(
+                    reasons: List<RouterFailure>,
                     routeOptions: RouteOptions
                 ) {
                     // no impl
                 }
 
-                override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                     // no impl
                 }
             }

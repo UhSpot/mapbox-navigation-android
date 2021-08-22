@@ -7,13 +7,21 @@ import com.mapbox.api.directions.v5.models.LegStep
 import com.mapbox.navigation.utils.internal.ifNonNull
 
 fun DirectionsRoute.isSameUuid(compare: DirectionsRoute?): Boolean =
-    this.routeOptions()?.requestUuid() == compare?.routeOptions()?.requestUuid()
+    this.requestUuid() == compare?.requestUuid()
 
 /**
- * Compare routes as geometries(if exist) or as a names of [LegStep] of the [DirectionsRoute]
+ * Compare routes as geometries (if exist) or as a names of [LegStep] of the [DirectionsRoute].
+ *
+ * **This check does not compare route annotations!**
  */
 fun DirectionsRoute.isSameRoute(compare: DirectionsRoute?): Boolean {
-    if (compare == null) return false
+    if (this === compare) {
+        return true
+    }
+
+    if (compare == null) {
+        return false
+    }
 
     ifNonNull(this.geometry(), compare.geometry()) { g1, g2 ->
         return g1 == g2

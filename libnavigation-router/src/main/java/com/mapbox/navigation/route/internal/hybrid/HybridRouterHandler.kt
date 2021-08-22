@@ -2,17 +2,19 @@ package com.mapbox.navigation.route.internal.hybrid
 
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.base.common.logger.Logger
 import com.mapbox.base.common.logger.model.Message
 import com.mapbox.base.common.logger.model.Tag
 import com.mapbox.navigation.base.route.RouteRefreshCallback
 import com.mapbox.navigation.base.route.RouteRefreshError
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
+import com.mapbox.navigation.utils.internal.LoggerProvider
 
 internal sealed class HybridRouterHandler(
     protected val primaryRouter: Router,
     protected val fallbackRouter: Router,
-    protected val logger: Logger
 ) {
 
     private companion object {
@@ -44,79 +46,89 @@ internal sealed class HybridRouterHandler(
     internal class Directions(
         primaryRouter: Router,
         fallbackRouter: Router,
-        logger: Logger
-    ) : HybridRouterHandler(primaryRouter, fallbackRouter, logger) {
+    ) : HybridRouterHandler(primaryRouter, fallbackRouter) {
 
         private inner class PrimaryCallback(
-            private val clientCallback: Router.Callback,
-            private val routeOptions: RouteOptions
-        ) : Router.Callback {
-            override fun onResponse(routes: List<DirectionsRoute>) {
-                clientCallback.onResponse(routes)
+            private val clientCallback: RouterCallback
+        ) : RouterCallback {
+            override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
+                clientCallback.onRoutesReady(routes, routerOrigin)
             }
 
-            override fun onFailure(throwable: Throwable) {
-                logger.w(
+            override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+                LoggerProvider.logger.w(
                     TAG,
                     Message(
                         """
                             Route request for $primaryRouterName failed with:
-                            throwable = $throwable
+                            $reasons
                             Trying to fallback to $fallbackRouterName...
-                        """.trimMargin()
+                        """.trimIndent()
                     )
                 )
 
                 fallbackRouterRequestId = fallbackRouter.getRoute(
                     routeOptions,
-                    FallbackCallback(clientCallback, throwable)
+                    FallbackCallback(clientCallback, reasons)
                 )
             }
 
-            override fun onCanceled() {
-                clientCallback.onCanceled()
+            override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
+                clientCallback.onCanceled(routeOptions, routerOrigin)
             }
         }
 
         private inner class FallbackCallback(
-            private val clientCallback: Router.Callback,
-            private val primaryThrowable: Throwable
-        ) : Router.Callback {
-            override fun onResponse(routes: List<DirectionsRoute>) {
-                clientCallback.onResponse(routes)
+            private val clientCallback: RouterCallback,
+            private val primaryFailureReasons: List<RouterFailure>
+        ) : RouterCallback {
+            override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
+                clientCallback.onRoutesReady(routes, routerOrigin)
             }
 
-            override fun onFailure(throwable: Throwable) {
+            override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                 clientCallback.onFailure(
-                    Throwable(
-                        """
-                            Primary router failed with:
-                            message = ${primaryThrowable.message}
-                            stack = ${primaryThrowable.stackTraceToString()}
-                            
-                            Fallback router failed with:
-                            message = ${throwable.message}
-                            stack = ${throwable.stackTraceToString()}
-                        """.trimIndent(),
-                    )
+                    primaryFailureReasons.map { failure ->
+                        RouterFailure(
+                            url = failure.url,
+                            routerOrigin = failure.routerOrigin,
+                            message =
+                            "Primary router ($primaryRouterName), " +
+                                "origin ${failure.routerOrigin}, " +
+                                "failed with: ${failure.message}",
+                            code = failure.code,
+                            throwable = failure.throwable
+                        )
+                    }.plus(
+                        reasons.map { failure ->
+                            RouterFailure(
+                                url = failure.url,
+                                routerOrigin = failure.routerOrigin,
+                                message =
+                                "Fallback router ($fallbackRouterName), " +
+                                    "origin ${failure.routerOrigin}, " +
+                                    "failed with: ${failure.message}",
+                                code = failure.code,
+                                throwable = failure.throwable
+                            )
+                        }
+                    ),
+                    routeOptions
                 )
             }
 
-            override fun onCanceled() {
-                clientCallback.onCanceled()
+            override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
+                clientCallback.onCanceled(routeOptions, routerOrigin)
             }
         }
 
         fun getRoute(
             routeOptions: RouteOptions,
-            callback: Router.Callback
+            callback: RouterCallback
         ) {
             primaryRouterRequestId = primaryRouter.getRoute(
                 routeOptions,
-                PrimaryCallback(
-                    callback,
-                    routeOptions
-                )
+                PrimaryCallback(callback)
             )
         }
 
@@ -133,8 +145,7 @@ internal sealed class HybridRouterHandler(
     internal class Refresh(
         primaryRouter: Router,
         fallbackRouter: Router,
-        logger: Logger
-    ) : HybridRouterHandler(primaryRouter, fallbackRouter, logger) {
+    ) : HybridRouterHandler(primaryRouter, fallbackRouter) {
 
         private inner class PrimaryCallback(
             private val route: DirectionsRoute,
@@ -146,12 +157,12 @@ internal sealed class HybridRouterHandler(
             }
 
             override fun onError(error: RouteRefreshError) {
-                logger.w(
+                LoggerProvider.logger.w(
                     TAG,
                     Message(
                         """
                             Route refresh for $primaryRouterName failed for
-                            UUID = ${route.routeOptions()?.requestUuid()}
+                            UUID = ${route.requestUuid()}
                             legIndex = $legIndex
                             
                             message = ${error.message}
@@ -177,7 +188,7 @@ internal sealed class HybridRouterHandler(
         ) : RouteRefreshCallback {
 
             override fun onRefresh(directionsRoute: DirectionsRoute) {
-                logger.w(
+                LoggerProvider.logger.w(
                     TAG,
                     Message(
                         """
@@ -189,12 +200,12 @@ internal sealed class HybridRouterHandler(
             }
 
             override fun onError(error: RouteRefreshError) {
-                logger.e(
+                LoggerProvider.logger.e(
                     TAG,
                     Message(
                         """
                             Fallback route refresh for $fallbackRouterName failed with:
-                            UUID = ${route.routeOptions()?.requestUuid()}
+                            UUID = ${route.requestUuid()}
                             legIndex = $legIndex
                             
                             message = ${error.message}

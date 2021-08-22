@@ -4,27 +4,28 @@ import android.content.Context
 import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.base.common.logger.Logger
-import com.mapbox.base.common.logger.model.Message
 import com.mapbox.base.common.logger.model.Tag
 import com.mapbox.navigation.base.options.RoutingTilesOptions
 import com.mapbox.navigation.base.route.RouteRefreshCallback
 import com.mapbox.navigation.base.route.RouteRefreshError
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.navigator.internal.MapboxNativeNavigator
+import com.mapbox.navigation.route.internal.util.ACCESS_TOKEN_QUERY_PARAM
 import com.mapbox.navigation.route.internal.util.httpUrl
+import com.mapbox.navigation.route.internal.util.redactQueryParam
 import com.mapbox.navigation.route.offboard.RouteBuilderProvider
-import com.mapbox.navigation.route.offboard.router.routeOptions
 import com.mapbox.navigation.route.onboard.OfflineRoute
-import com.mapbox.navigation.utils.NavigationException
 import com.mapbox.navigation.utils.internal.RequestMap
 import com.mapbox.navigation.utils.internal.ThreadController
 import com.mapbox.navigation.utils.internal.cancelRequest
-import com.mapbox.navigator.RouterError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.URL
 
 /**
  * MapboxOnboardRouter provides offline route fetching
@@ -34,12 +35,11 @@ import kotlinx.coroutines.withContext
  *
  * @param navigatorNative Native Navigator
  * @param context application [Context]
- * @param logger interface for logging any events
  */
 class MapboxOnboardRouter(
+    private val accessToken: String,
     private val navigatorNative: MapboxNativeNavigator,
-    private val context: Context,
-    private val logger: Logger
+    private val context: Context
 ) : Router {
 
     private companion object {
@@ -57,39 +57,43 @@ class MapboxOnboardRouter(
      */
     override fun getRoute(
         routeOptions: RouteOptions,
-        callback: Router.Callback
+        callback: RouterCallback
     ): Long {
         val httpUrl = RouteBuilderProvider
             .getBuilder(null)
-            .routeOptions(routeOptions, false)
+            .accessToken(accessToken)
+            .routeOptions(routeOptions)
             .build()
             .httpUrl()
 
         val offlineRoute = OfflineRoute.Builder(httpUrl.toUrl()).build()
 
         val requestId = requests.generateNextRequestId()
-        val internalCallback = object : Router.Callback {
-            override fun onResponse(routes: List<DirectionsRoute>) {
+        val internalCallback = object : RouterCallback {
+            override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
                 requests.remove(requestId)
-                callback.onResponse(routes)
+                callback.onRoutesReady(routes, routerOrigin)
             }
 
-            override fun onFailure(throwable: Throwable) {
+            override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                 requests.remove(requestId)
-                callback.onFailure(throwable)
+                callback.onFailure(reasons, routeOptions)
             }
 
-            override fun onCanceled() {
+            override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                 requests.remove(requestId)
-                callback.onCanceled()
+                callback.onCanceled(routeOptions, routerOrigin)
             }
         }
-        requests.put(requestId, retrieveRoute(offlineRoute.buildUrl(), internalCallback))
+        requests.put(
+            requestId,
+            retrieveRoute(routeOptions, offlineRoute.buildUrl(), internalCallback)
+        )
         return requestId
     }
 
     override fun cancelRouteRequest(requestId: Long) {
-        requests.cancelRequest(requestId, logger, loggerTag) {
+        requests.cancelRequest(requestId, loggerTag) {
             it.cancel()
         }
     }
@@ -133,19 +137,36 @@ class MapboxOnboardRouter(
         // Do nothing
     }
 
-    private fun retrieveRoute(url: String, callback: Router.Callback): Job {
+    private fun retrieveRoute(
+        routeOptions: RouteOptions,
+        url: String,
+        callback: RouterCallback
+    ): Job {
+        val javaUrl = URL(url.redactQueryParam(ACCESS_TOKEN_QUERY_PARAM))
         return mainJobControl.scope.launch {
             try {
                 val routerResult = getRoute(url)
                 if (routerResult.isValue) {
-                    val routes: List<DirectionsRoute> = parseDirectionsRoutes(routerResult.value!!)
-                    callback.onResponse(routes)
+                    val routes = parseDirectionsRoutes(routerResult.value!!).map {
+                        it.toBuilder().routeOptions(routeOptions).build()
+                    }
+                    callback.onRoutesReady(routes, RouterOrigin.Onboard)
                 } else {
-                    callback
-                        .onFailure(NavigationException(generateErrorMessage(routerResult.error!!)))
+                    val error = routerResult.error!!
+                    callback.onFailure(
+                        listOf(
+                            RouterFailure(
+                                url = javaUrl,
+                                routerOrigin = RouterOrigin.Onboard,
+                                message = error.error,
+                                code = error.code
+                            )
+                        ),
+                        routeOptions
+                    )
                 }
             } catch (e: CancellationException) {
-                callback.onCanceled()
+                callback.onCanceled(routeOptions, RouterOrigin.Onboard)
             }
         }
     }
@@ -154,15 +175,9 @@ class MapboxOnboardRouter(
         navigatorNative.getRoute(url)
     }
 
+    // todo Nav Native serializes route options, it probably shouldn't
     private suspend fun parseDirectionsRoutes(json: String): List<DirectionsRoute> =
         withContext(ThreadController.IODispatcher) {
             DirectionsResponse.fromJson(json).routes()
         }
-
-    private fun generateErrorMessage(error: RouterError): String {
-        val errorMessage =
-            "Error occurred fetching offline route: ${error.error} - Code: ${error.code}"
-        logger.e(loggerTag, Message(errorMessage))
-        return errorMessage
-    }
 }

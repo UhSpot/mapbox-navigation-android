@@ -4,8 +4,10 @@ import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.base.common.logger.model.Message
 import com.mapbox.navigation.base.route.RouteAlternativesOptions
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.directions.session.DirectionsSession
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.routeoptions.RouteOptionsUpdater
 import com.mapbox.navigation.core.trip.session.TripSession
 import com.mapbox.navigation.core.trip.session.TripSessionState
@@ -26,7 +28,9 @@ internal class RouteAlternativesController(
 ) {
     private val jobControl = ThreadController.getMainScopeAndRootJob()
 
-    private val mapboxTimer = MapboxTimer()
+    private val mapboxTimer = MapboxTimer().apply {
+        restartAfterMillis = options.intervalMillis
+    }
     private val observers = CopyOnWriteArraySet<RouteAlternativesObserver>()
     private var currentRequestId: Long? = null
 
@@ -34,7 +38,6 @@ internal class RouteAlternativesController(
         val needsToStartTimer = observers.isEmpty()
         observers.add(routeAlternativesObserver)
         if (needsToStartTimer) {
-            mapboxTimer.restartAfterMillis = options.intervalMillis
             restartTimer()
         }
     }
@@ -89,7 +92,9 @@ internal class RouteAlternativesController(
 
     fun interrupt() {
         currentRequestId?.let { directionsSession.cancelRouteRequest(it) }
-        restartTimer()
+        if (observers.isNotEmpty()) {
+            restartTimer()
+        }
     }
 
     private fun restartTimer() {
@@ -99,8 +104,8 @@ internal class RouteAlternativesController(
         }
     }
 
-    private val routesRequestCallback = object : RoutesRequestCallback {
-        override fun onRoutesReady(routes: List<DirectionsRoute>) {
+    private val routesRequestCallback = object : RouterCallback {
+        override fun onRoutesReady(routes: List<DirectionsRoute>, routerOrigin: RouterOrigin) {
             val routeProgress = tripSession.getRouteProgress()
                 ?: return
             jobControl.scope.launch {
@@ -108,19 +113,20 @@ internal class RouteAlternativesController(
                     tripSession.getState() == TripSessionState.STARTED
                 ) {
                     val alternatives = routes.filter { navigator.isDifferentRoute(it) }
-                    observers.forEach { it.onRouteAlternatives(routeProgress, alternatives) }
+                    observers.forEach {
+                        it.onRouteAlternatives(routeProgress, alternatives, routerOrigin)
+                    }
                 }
             }
         }
 
-        override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
+        override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
             logger.e(
-                msg = Message("Route alternatives request failed"),
-                tr = throwable
+                msg = Message("Route alternatives request failed")
             )
         }
 
-        override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+        override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
             logger.w(msg = Message("Route alternatives request canceled"))
         }
     }

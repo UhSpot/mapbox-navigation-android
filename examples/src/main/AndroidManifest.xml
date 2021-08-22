@@ -24,20 +24,8 @@
     </activity>
 
     <activity
-        android:name="com.mapbox.navigation.examples.internal.MapboxRouteLineActivity"
-        android:label="@string/title_route_line"
-        android:screenOrientation="portrait">
-    </activity>
-
-    <activity
         android:name=".camera.MapboxCameraAnimationsActivity"
         android:label="@string/title_camera"
-        android:screenOrientation="portrait">
-    </activity>
-
-    <activity
-        android:name=".MapboxSnapshotActivity"
-        android:label="@string/title_snapshotter"
         android:screenOrientation="portrait">
     </activity>
 
@@ -100,7 +88,12 @@
 
     <activity
         android:name=".MapboxBuildingHighlightActivity"
-        android:label="@string/title_trip_progress">
+        android:label="@string/title_building_highlight">
+    </activity>
+
+    <activity
+        android:name=".MultiLegRouteExampleActivity"
+        android:label="@string/title_multileg_route">
     </activity>
 
     <activity

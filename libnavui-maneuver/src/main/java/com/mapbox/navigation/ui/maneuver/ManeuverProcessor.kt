@@ -3,113 +3,350 @@ package com.mapbox.navigation.ui.maneuver
 import com.mapbox.api.directions.v5.models.BannerComponents
 import com.mapbox.api.directions.v5.models.BannerInstructions
 import com.mapbox.api.directions.v5.models.BannerText
-import com.mapbox.api.directions.v5.models.LegStep
-import com.mapbox.common.HttpMethod
-import com.mapbox.common.HttpRequest
-import com.mapbox.common.UAComponents
+import com.mapbox.api.directions.v5.models.DirectionsRoute
+import com.mapbox.geojson.Point
+import com.mapbox.navigation.base.formatter.DistanceFormatter
 import com.mapbox.navigation.base.trip.model.RouteProgress
-import com.mapbox.navigation.base.trip.model.RouteStepProgress
-import com.mapbox.navigation.ui.maneuver.RoadShieldDownloader.downloadImage
+import com.mapbox.navigation.core.internal.utils.isSameRoute
 import com.mapbox.navigation.ui.maneuver.model.Component
 import com.mapbox.navigation.ui.maneuver.model.DelimiterComponentNode
 import com.mapbox.navigation.ui.maneuver.model.ExitComponentNode
 import com.mapbox.navigation.ui.maneuver.model.ExitNumberComponentNode
 import com.mapbox.navigation.ui.maneuver.model.Lane
 import com.mapbox.navigation.ui.maneuver.model.LaneIndicator
+import com.mapbox.navigation.ui.maneuver.model.LegIndexToManeuvers
 import com.mapbox.navigation.ui.maneuver.model.Maneuver
+import com.mapbox.navigation.ui.maneuver.model.ManeuverOptions
 import com.mapbox.navigation.ui.maneuver.model.PrimaryManeuver
 import com.mapbox.navigation.ui.maneuver.model.RoadShieldComponentNode
 import com.mapbox.navigation.ui.maneuver.model.SecondaryManeuver
+import com.mapbox.navigation.ui.maneuver.model.StepDistance
+import com.mapbox.navigation.ui.maneuver.model.StepIndexToManeuvers
 import com.mapbox.navigation.ui.maneuver.model.SubManeuver
 import com.mapbox.navigation.ui.maneuver.model.TextComponentNode
-import com.mapbox.navigation.ui.maneuver.model.TotalManeuverDistance
 import com.mapbox.navigation.ui.utils.internal.ifNonNull
-import java.util.Collections
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.UUID
 
-internal class ManeuverProcessor {
+internal object ManeuverProcessor {
 
-    private val maneuverList = CopyOnWriteArrayList<Maneuver>()
-    private val filteredInstructionList = CopyOnWriteArrayList<BannerInstructions>()
-    private val bannerInstructionsComparator =
-        Comparator<BannerInstructions> { instructions, nextInstructions ->
-            instructions.distanceAlongGeometry().compareTo(nextInstructions.distanceAlongGeometry())
-        }
-
-    suspend fun process(action: ManeuverAction): ManeuverResult {
+    fun process(action: ManeuverAction): ManeuverResult {
         return when (action) {
-            is ManeuverAction.GetStepDistanceRemaining -> {
-                processStepDistanceRemaining(action.stepProgress)
+            is ManeuverAction.GetManeuverListWithRoute -> {
+                processManeuverList(
+                    action.route,
+                    action.routeLegIndex,
+                    action.maneuverState,
+                    action.maneuverOption,
+                    action.distanceFormatter
+                )
             }
-            is ManeuverAction.GetAllBannerInstructions -> {
-                processBannerInstructions(action.routeProgress)
-            }
-            is ManeuverAction.GetAllBannerInstructionsAfterStep -> {
-                processBannerInstructionsAfterStep(action.routeProgress, action.bannerInstructions)
-            }
-            is ManeuverAction.GetAllManeuvers -> {
-                processManeuverList(action.bannerInstructions)
-            }
-            is ManeuverAction.GetManeuver -> {
-                processCurrentManeuver(action.bannerInstruction)
+            is ManeuverAction.GetManeuverList -> {
+                processManeuverList(
+                    action.routeProgress,
+                    action.maneuverState,
+                    action.maneuverOption,
+                    action.distanceFormatter
+                )
             }
         }
     }
 
-    private suspend fun processCurrentManeuver(
-        bannerInstruction: BannerInstructions
-    ): ManeuverResult {
+    private fun processManeuverList(
+        route: DirectionsRoute,
+        routeLegIndex: Int? = null,
+        maneuverState: ManeuverState,
+        maneuverOptions: ManeuverOptions,
+        distanceFormatter: DistanceFormatter,
+    ): ManeuverResult.GetManeuverList {
+        if (!route.isSameRoute(maneuverState.route)) {
+            maneuverState.route = route
+            maneuverState.allManeuvers.clear()
+            maneuverState.roadShields.clear()
+            try {
+                createAllManeuversForRoute(route, maneuverState, distanceFormatter)
+            } catch (exception: RuntimeException) {
+                return ManeuverResult.GetManeuverList.Failure(exception.message)
+            }
+        }
+        return try {
+            val maneuverList = maneuverState.allManeuvers.getManeuversForRouteLeg(
+                maneuverOptions.filterDuplicateManeuvers, routeLegIndex
+            )
+            ManeuverResult.GetManeuverList.Success(maneuverList)
+        } catch (exception: RuntimeException) {
+            ManeuverResult.GetManeuverList.Failure(exception.message)
+        }
+    }
+
+    private fun List<LegIndexToManeuvers>.getManeuversForRouteLeg(
+        filterManeuvers: Boolean,
+        routeLegIndex: Int? = null
+    ): List<Maneuver> {
+        if (isEmpty()) {
+            throw RuntimeException("maneuver list cannot be empty")
+        }
+
+        val legToManeuver = if (routeLegIndex == null) {
+            this[0]
+        } else {
+            this.find { item -> item.legIndex == routeLegIndex } ?: throw RuntimeException(
+                "provided leg for which maneuvers should be generated is not found in the route"
+            )
+        }
+
+        return if (filterManeuvers) {
+            legToManeuver.stepIndexToManeuvers.getManeuversForStepsAndFilter()
+        } else {
+            legToManeuver.stepIndexToManeuvers.getManeuversForSteps()
+        }.also {
+            if (it.isEmpty()) {
+                throw RuntimeException("no maneuvers available for the current route or its leg")
+            }
+        }
+    }
+
+    private fun processManeuverList(
+        routeProgress: RouteProgress,
+        maneuverState: ManeuverState,
+        maneuverOptions: ManeuverOptions,
+        distanceFormatter: DistanceFormatter
+    ): ManeuverResult.GetManeuverListWithProgress {
+        return try {
+            val route = routeProgress.route
+            val routeLegIndex = routeProgress.currentLegProgress?.legIndex
+            val stepIndex = routeProgress.currentLegProgress?.currentStepProgress?.stepIndex
+            val currentInstructionIndex =
+                routeProgress.currentLegProgress?.currentStepProgress?.instructionIndex
+            val stepDistanceRemaining =
+                routeProgress.currentLegProgress?.currentStepProgress?.distanceRemaining?.toDouble()
+
+            when {
+                routeLegIndex == null -> {
+                    return ManeuverResult.GetManeuverListWithProgress.Failure(
+                        "currentLegProgress is null"
+                    )
+                }
+                stepIndex == null -> {
+                    return ManeuverResult.GetManeuverListWithProgress.Failure(
+                        "stepIndex is null"
+                    )
+                }
+                currentInstructionIndex == null -> {
+                    return ManeuverResult.GetManeuverListWithProgress.Failure(
+                        "instructionIndex is null"
+                    )
+                }
+                stepDistanceRemaining == null -> {
+                    return ManeuverResult.GetManeuverListWithProgress.Failure(
+                        "distanceRemaining is null"
+                    )
+                }
+                else -> {
+                    if (!route.isSameRoute(maneuverState.route)) {
+                        maneuverState.route = route
+                        maneuverState.allManeuvers.clear()
+                        maneuverState.roadShields.clear()
+                        createAllManeuversForRoute(route, maneuverState, distanceFormatter)
+                    }
+
+                    val legToManeuvers = routeLegIndex.findIn(maneuverState.allManeuvers)
+                    val stepsToManeuvers = legToManeuvers.stepIndexToManeuvers
+                    val stepToManeuvers = stepIndex.findIn(stepsToManeuvers)
+                    val indexOfStepToManeuvers = stepsToManeuvers.indexOf(stepToManeuvers)
+
+                    updateDistanceRemainingForCurrentManeuver(
+                        stepToManeuvers,
+                        currentInstructionIndex,
+                        stepDistanceRemaining
+                    )
+
+                    val maneuverList = if (maneuverOptions.filterDuplicateManeuvers) {
+                        stepsToManeuvers.getManeuversForStepsWithProgressAndFilter(
+                            currentInstructionIndex,
+                            indexOfStepToManeuvers
+                        )
+                    } else {
+                        stepsToManeuvers.getManeuversForStepsWithProgress(
+                            currentInstructionIndex,
+                            indexOfStepToManeuvers
+                        )
+                    }
+
+                    ManeuverResult.GetManeuverListWithProgress.Success(maneuverList)
+                }
+            }
+        } catch (exception: Exception) {
+            ManeuverResult.GetManeuverListWithProgress.Failure(exception.message)
+        }
+    }
+
+    private fun createAllManeuversForRoute(
+        route: DirectionsRoute,
+        maneuverState: ManeuverState,
+        distanceFormatter: DistanceFormatter
+    ) {
+        ifNonNull(route.legs()) { routeLegs ->
+            routeLegs.forEachIndexed { index, routeLeg ->
+                ifNonNull(routeLeg?.steps()) { steps ->
+                    val stepList = mutableListOf<StepIndexToManeuvers>()
+                    for (stepIndex in 0..steps.lastIndex) {
+                        val stepIntersections = if (stepIndex == steps.lastIndex) {
+                            steps[stepIndex].intersections()
+                        } else {
+                            steps[stepIndex + 1].intersections()
+                        }
+                        ifNonNull(
+                            steps[stepIndex].bannerInstructions(),
+                            stepIntersections
+                        ) { bannerInstruction, intersections ->
+                            val maneuverPoint = intersections.first().location()
+                            val maneuverList = mutableListOf<Maneuver>()
+                            bannerInstruction.forEach { banner ->
+                                maneuverList.add(
+                                    transformToManeuver(
+                                        bannerInstruction = banner,
+                                        maneuverPoint = maneuverPoint,
+                                        distanceFormatter = distanceFormatter,
+                                    )
+                                )
+                            }
+                            val stepIndexToManeuvers = StepIndexToManeuvers(
+                                stepIndex,
+                                maneuverList
+                            )
+                            stepList.add(stepIndexToManeuvers)
+                        } ?: throw RuntimeException("LegStep should have valid banner instructions")
+                    }
+                    maneuverState.allManeuvers.add(LegIndexToManeuvers(index, stepList))
+                } ?: throw RuntimeException("RouteLeg should have valid steps")
+            }
+        } ?: throw RuntimeException("Route should have valid legs")
+        if (maneuverState.allManeuvers.isEmpty()) {
+            throw RuntimeException("Maneuver list could not be created")
+        }
+    }
+
+    private fun Int.findIn(legs: List<LegIndexToManeuvers>): LegIndexToManeuvers {
+        return legs.find {
+            it.legIndex == this
+        } ?: throw RuntimeException("Could not find leg with index $this")
+    }
+
+    private fun Int.findIn(steps: List<StepIndexToManeuvers>): StepIndexToManeuvers {
+        return steps.find {
+            it.stepIndex == this
+        } ?: throw RuntimeException("Could not find step with index $this")
+    }
+
+    private fun updateDistanceRemainingForCurrentManeuver(
+        stepToManeuvers: StepIndexToManeuvers,
+        currentInstructionIndex: Int,
+        stepDistanceRemaining: Double
+    ) {
+        stepToManeuvers.maneuverList[currentInstructionIndex].stepDistance.distanceRemaining =
+            stepDistanceRemaining
+    }
+
+    private fun List<StepIndexToManeuvers>.getManeuversForStepsAndFilter(): List<Maneuver> {
+        val maneuverList = mutableListOf<Maneuver>()
+        forEach { stepIndexToManeuver ->
+            if (stepIndexToManeuver.maneuverList.size > 1) {
+                maneuverList.add(stepIndexToManeuver.maneuverList[0])
+            } else {
+                maneuverList.addAll(stepIndexToManeuver.maneuverList)
+            }
+        }
+        return maneuverList
+    }
+
+    private fun List<StepIndexToManeuvers>.getManeuversForSteps(): List<Maneuver> {
+        val maneuverList = mutableListOf<Maneuver>()
+        forEach { stepIndexToManeuver ->
+            maneuverList.addAll(stepIndexToManeuver.maneuverList)
+        }
+        return maneuverList
+    }
+
+    private fun List<StepIndexToManeuvers>.getManeuversForStepsWithProgress(
+        currentInstructionIndex: Int,
+        indexOfStepToManeuvers: Int
+    ): List<Maneuver> {
+        val list = mutableListOf<Maneuver>()
+        // only take the current and remaining instructions for the current step
+        list.addAll(
+            this[indexOfStepToManeuvers].maneuverList.drop(currentInstructionIndex)
+        )
+        // add all remaining instructions after the current step
+        list.addAll(this.drop(indexOfStepToManeuvers + 1).getManeuversForSteps())
+        return list
+    }
+
+    private fun List<StepIndexToManeuvers>.getManeuversForStepsWithProgressAndFilter(
+        currentInstructionIndex: Int,
+        indexOfStepToManeuvers: Int
+    ): List<Maneuver> {
+        val list = mutableListOf<Maneuver>()
+        // only take the current instructions for the current step
+        list.add(this[indexOfStepToManeuvers].maneuverList[currentInstructionIndex])
+        // add all remaining instructions after the current step without duplicates
+        list.addAll(this.drop(indexOfStepToManeuvers + 1).getManeuversForStepsAndFilter())
+        return list
+    }
+
+    private fun transformToManeuver(
+        maneuverPoint: Point,
+        bannerInstruction: BannerInstructions,
+        distanceFormatter: DistanceFormatter
+    ): Maneuver {
         val primaryManeuver = getPrimaryManeuver(bannerInstruction.primary())
         val secondaryManeuver = getSecondaryManeuver(bannerInstruction.secondary())
         val subManeuver = getSubManeuverText(bannerInstruction.sub())
-        val totalDistance = getTotalStepDistance(bannerInstruction)
         val laneGuidance = getLaneGuidance(bannerInstruction)
-        val maneuver = Maneuver(
+        val totalStepDistance = bannerInstruction.distanceAlongGeometry()
+        val stepDistance = StepDistance(distanceFormatter, totalStepDistance, null)
+        return Maneuver(
             primaryManeuver,
-            totalDistance,
+            stepDistance,
             secondaryManeuver,
             subManeuver,
-            laneGuidance
+            laneGuidance,
+            maneuverPoint
         )
-        return ManeuverResult.GetManeuver(maneuver)
     }
 
-    private fun getTotalStepDistance(bannerInstruction: BannerInstructions) =
-        TotalManeuverDistance(bannerInstruction.distanceAlongGeometry())
-
-    private suspend fun getPrimaryManeuver(bannerText: BannerText): PrimaryManeuver {
+    private fun getPrimaryManeuver(bannerText: BannerText): PrimaryManeuver {
         val bannerComponentList = bannerText.components()
         return when (!bannerComponentList.isNullOrEmpty()) {
             true -> {
-                PrimaryManeuver
-                    .Builder()
-                    .text(bannerText.text())
-                    .type(bannerText.type())
-                    .degrees(bannerText.degrees())
-                    .modifier(bannerText.modifier())
-                    .drivingSide(bannerText.drivingSide())
-                    .componentList(createComponentList(bannerComponentList))
-                    .build()
+                PrimaryManeuver(
+                    UUID.randomUUID().toString(),
+                    bannerText.text(),
+                    bannerText.type(),
+                    bannerText.degrees(),
+                    bannerText.modifier(),
+                    bannerText.drivingSide(),
+                    createComponents(bannerComponentList)
+                )
             }
             else -> {
-                PrimaryManeuver.Builder().build()
+                PrimaryManeuver()
             }
         }
     }
 
-    private suspend fun getSecondaryManeuver(bannerText: BannerText?): SecondaryManeuver? {
+    private fun getSecondaryManeuver(bannerText: BannerText?): SecondaryManeuver? {
         val bannerComponentList = bannerText?.components()
         return when (!bannerComponentList.isNullOrEmpty()) {
             true -> {
-                SecondaryManeuver
-                    .Builder()
-                    .text(bannerText.text())
-                    .type(bannerText.type())
-                    .degrees(bannerText.degrees())
-                    .modifier(bannerText.modifier())
-                    .drivingSide(bannerText.drivingSide())
-                    .componentList(createComponentList(bannerComponentList))
-                    .build()
+                SecondaryManeuver(
+                    UUID.randomUUID().toString(),
+                    bannerText.text(),
+                    bannerText.type(),
+                    bannerText.degrees(),
+                    bannerText.modifier(),
+                    bannerText.drivingSide(),
+                    createComponents(bannerComponentList)
+                )
             }
             else -> {
                 null
@@ -117,21 +354,21 @@ internal class ManeuverProcessor {
         }
     }
 
-    private suspend fun getSubManeuverText(bannerText: BannerText?): SubManeuver? {
+    private fun getSubManeuverText(bannerText: BannerText?): SubManeuver? {
         bannerText?.let { subBanner ->
             if (subBanner.type() != null && subBanner.text().isNotEmpty()) {
                 val bannerComponentList = subBanner.components()
                 return when (!bannerComponentList.isNullOrEmpty()) {
                     true -> {
-                        SubManeuver
-                            .Builder()
-                            .text(bannerText.text())
-                            .type(bannerText.type())
-                            .degrees(bannerText.degrees())
-                            .modifier(bannerText.modifier())
-                            .drivingSide(bannerText.drivingSide())
-                            .componentList(createComponentList(bannerComponentList))
-                            .build()
+                        SubManeuver(
+                            UUID.randomUUID().toString(),
+                            bannerText.text(),
+                            bannerText.type(),
+                            bannerText.degrees(),
+                            bannerText.modifier(),
+                            bannerText.drivingSide(),
+                            createComponents(bannerComponentList)
+                        )
                     }
                     else -> {
                         null
@@ -142,7 +379,37 @@ internal class ManeuverProcessor {
         return null
     }
 
-    private suspend fun createComponentList(
+    private fun getLaneGuidance(bannerInstruction: BannerInstructions): Lane? {
+        val subBannerText = bannerInstruction.sub()
+        val primaryBannerText = bannerInstruction.primary()
+        return subBannerText?.let { subBanner ->
+            if (subBanner.type() == null && subBanner.text().isEmpty()) {
+                val bannerComponentList = subBanner.components()
+                return ifNonNull(bannerComponentList) { list ->
+                    val laneIndicatorList = mutableListOf<LaneIndicator>()
+                    list.forEach {
+                        val directions = it.directions()
+                        val active = it.active()
+                        if (!directions.isNullOrEmpty() && active != null) {
+                            laneIndicatorList.add(
+                                LaneIndicator
+                                    .Builder()
+                                    .isActive(active)
+                                    .directions(directions)
+                                    .build()
+                            )
+                        }
+                    }
+                    // TODO: This is a fallback solution. Remove this and add all active_directions
+                    //  to LaneIndicator() once directions have migrated all customers to valhalla
+                    Lane(laneIndicatorList, primaryBannerText.modifier())
+                }
+            }
+            null
+        }
+    }
+
+    private fun createComponents(
         bannerComponentList: List<BannerComponents>
     ): List<Component> {
         val componentList = mutableListOf<Component>()
@@ -182,159 +449,12 @@ internal class ManeuverProcessor {
                     val roadShield = RoadShieldComponentNode
                         .Builder()
                         .text(component.text())
-                        .shieldIcon(
-                            component.imageBaseUrl()?.let {
-                                val roadShieldRequest = getHttpRequest(it)
-                                return@let downloadImage(roadShieldRequest).data
-                            }
-                        )
+                        .shieldUrl(component.imageBaseUrl())
                         .build()
                     componentList.add(Component(BannerComponents.ICON, roadShield))
                 }
             }
         }
         return componentList
-    }
-
-    private fun getLaneGuidance(bannerInstruction: BannerInstructions): Lane? {
-        val subBannerText = bannerInstruction.sub()
-        val primaryBannerText = bannerInstruction.primary()
-        return subBannerText?.let { subBanner ->
-            if (subBanner.type() == null && subBanner.text().isEmpty()) {
-                val bannerComponentList = subBanner.components()
-                return ifNonNull(bannerComponentList) { list ->
-                    val laneIndicatorList = mutableListOf<LaneIndicator>()
-                    list.forEach {
-                        val directions = it.directions()
-                        val active = it.active()
-                        if (!directions.isNullOrEmpty() && active != null) {
-                            laneIndicatorList.add(
-                                LaneIndicator
-                                    .Builder()
-                                    .isActive(active)
-                                    .directions(directions)
-                                    .build()
-                            )
-                        }
-                    }
-                    // TODO: This is a fallback solution. Remove this and add all active_directions
-                    //  to LaneIndicator() once directions have migrated all customers to valhalla
-                    Lane
-                        .Builder()
-                        .allLanes(laneIndicatorList)
-                        .activeDirection(primaryBannerText.modifier())
-                        .build()
-                }
-            }
-            null
-        }
-    }
-
-    private fun getHttpRequest(imageBaseUrl: String): HttpRequest {
-        return HttpRequest.Builder()
-            .url(imageBaseUrl.plus(SVG))
-            .body(byteArrayOf())
-            .headers(hashMapOf(Pair(USER_AGENT_KEY, USER_AGENT_VALUE)))
-            .method(HttpMethod.GET)
-            .uaComponents(
-                UAComponents.Builder()
-                    .sdkIdentifierComponent(SDK_IDENTIFIER)
-                    .build()
-            )
-            .build()
-    }
-
-    private fun processStepDistanceRemaining(stepProgress: RouteStepProgress) =
-        ManeuverResult.GetStepDistanceRemaining(stepProgress.distanceRemaining.toDouble())
-
-    private fun processBannerInstructions(
-        routeProgress: RouteProgress
-    ): ManeuverResult {
-        val bannerInstructionList = mutableListOf<BannerInstructions>()
-        ifNonNull(routeProgress.currentLegProgress?.routeLeg?.steps()) { allSteps ->
-            allSteps.forEach { step ->
-                step.bannerInstructions()?.let { list ->
-                    bannerInstructionList.addAll(list)
-                }
-            }
-        }
-        return ManeuverResult.GetAllBannerInstructions(bannerInstructionList)
-    }
-
-    private fun processBannerInstructionsAfterStep(
-        routeProgress: RouteProgress,
-        bannerInstructions: List<BannerInstructions>
-    ): ManeuverResult {
-        val currentStepProgress = routeProgress.currentLegProgress?.currentStepProgress
-        val currentStep = currentStepProgress?.step
-        val stepDistanceRemaining = currentStepProgress?.distanceRemaining?.toDouble()
-        val filteredList = ifNonNull(stepDistanceRemaining) { distanceRemaining ->
-            val currentBannerInstructions: BannerInstructions? = findCurrentBannerInstructions(
-                currentStep, distanceRemaining
-            )
-            if (bannerInstructions.contains(currentBannerInstructions)) {
-                val currentInstructionIndex = bannerInstructions.indexOf(currentBannerInstructions)
-                if (currentInstructionIndex + 1 <= bannerInstructions.size) {
-                    bannerInstructions.subList(currentInstructionIndex + 1, bannerInstructions.size)
-                } else {
-                    emptyList()
-                }
-            } else {
-                bannerInstructions
-            }
-        } ?: bannerInstructions
-        return ManeuverResult.GetAllBannerInstructionsAfterStep(filteredList)
-    }
-
-    private suspend fun processManeuverList(
-        bannerInstructionsAfterStep: List<BannerInstructions>
-    ): ManeuverResult {
-        if (bannerInstructionsAfterStep != filteredInstructionList) {
-            maneuverList.clear()
-            filteredInstructionList.clear()
-            filteredInstructionList.addAll(bannerInstructionsAfterStep)
-            filteredInstructionList.forEach { bannerInstructions ->
-                val result = processCurrentManeuver(bannerInstructions)
-                maneuverList.add((result as ManeuverResult.GetManeuver).maneuver)
-            }
-        }
-        return ManeuverResult.GetAllManeuvers(maneuverList)
-    }
-
-    private fun findCurrentBannerInstructions(
-        currentStep: LegStep?,
-        stepDistanceRemaining: Double
-    ): BannerInstructions? {
-        if (currentStep == null) {
-            return null
-        }
-        val instructions = currentStep.bannerInstructions()
-        return if (!instructions.isNullOrEmpty()) {
-            val sortedInstructions: List<BannerInstructions> = sortBannerInstructions(instructions)
-            for (bannerInstructions in sortedInstructions) {
-                val distanceAlongGeometry = bannerInstructions.distanceAlongGeometry().toInt()
-                if (distanceAlongGeometry >= stepDistanceRemaining.toInt()) {
-                    return bannerInstructions
-                }
-            }
-            instructions[0]
-        } else {
-            null
-        }
-    }
-
-    private fun sortBannerInstructions(
-        instructions: List<BannerInstructions>
-    ): List<BannerInstructions> {
-        val sortedInstructions: List<BannerInstructions> = ArrayList(instructions)
-        Collections.sort(sortedInstructions, bannerInstructionsComparator)
-        return sortedInstructions
-    }
-
-    private companion object {
-        private const val SVG = ".svg"
-        private const val USER_AGENT_KEY = "User-Agent"
-        private const val USER_AGENT_VALUE = "MapboxJava/"
-        private const val SDK_IDENTIFIER = "mapbox-navigation-ui-android"
     }
 }

@@ -747,7 +747,7 @@ class TurnIconResources private constructor(
         private var turnIconUturn: Int = R.drawable.mapbox_ic_uturn
 
         /**
-         * apply turn icon to the builder.
+         * apply arrive icon to the builder.
          * @param turnIconArrive Int
          * @return Builder
          */
@@ -755,7 +755,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconArrive = turnIconArrive }
 
         /**
-         * apply turn icon to the builder.
+         * apply arrive left icon to the builder.
          * @param turnIconArriveLeft Int
          * @return Builder
          */
@@ -763,7 +763,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconArriveLeft = turnIconArriveLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply arrive right icon to the builder.
          * @param turnIconArriveRight Int
          * @return Builder
          */
@@ -771,7 +771,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconArriveRight = turnIconArriveRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply arrive straight icon to the builder.
          * @param turnIconArriveStraight Int
          * @return Builder
          */
@@ -779,7 +779,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconArriveStraight = turnIconArriveStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue icon to the builder.
          * @param turnIconContinue Int
          * @return Builder
          */
@@ -787,7 +787,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinue = turnIconContinue }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue left icon to the builder.
          * @param turnIconContinueLeft Int
          * @return Builder
          */
@@ -795,7 +795,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinueLeft = turnIconContinueLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue right icon to the builder.
          * @param turnIconContinueRight Int
          * @return Builder
          */
@@ -803,7 +803,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinueRight = turnIconContinueRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue straight icon to the builder.
          * @param turnIconContinueStraight Int
          * @return Builder
          */
@@ -811,7 +811,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinueStraight = turnIconContinueStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue uturn icon to the builder.
          * @param turnIconContinueUturn Int
          * @return Builder
          */
@@ -819,7 +819,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinueUturn = turnIconContinueUturn }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue slight left icon to the builder.
          * @param turnIconContinueSlightLeft Int
          * @return Builder
          */
@@ -827,7 +827,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinueSlightLeft = turnIconContinueSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply continue slight right icon to the builder.
          * @param turnIconContinueSlightRight Int
          * @return Builder
          */
@@ -835,7 +835,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconContinueSlightRight = turnIconContinueSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply depart icon to the builder.
          * @param turnIconDepart Int
          * @return Builder
          */
@@ -843,7 +843,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconDepart = turnIconDepart }
 
         /**
-         * apply turn icon to the builder.
+         * apply depart left icon to the builder.
          * @param turnIconDepartLeft Int
          * @return Builder
          */
@@ -851,7 +851,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconDepartLeft = turnIconDepartLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply depart right icon to the builder.
          * @param turnIconDepartRight Int
          * @return Builder
          */
@@ -859,7 +859,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconDepartRight = turnIconDepartRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply depart straight icon to the builder.
          * @param turnIconDepartStraight Int
          * @return Builder
          */
@@ -867,7 +867,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconDepartStraight = turnIconDepartStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply end road left icon to the builder.
          * @param turnIconEndRoadLeft Int
          * @return Builder
          */
@@ -875,7 +875,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconEndRoadLeft = turnIconEndRoadLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply end road right icon to the builder.
          * @param turnIconEndRoadRight Int
          * @return Builder
          */
@@ -883,7 +883,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconEndRoadRight = turnIconEndRoadRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply fork icon to the builder.
          * @param turnIconFork Int
          * @return Builder
          */
@@ -891,7 +891,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconFork = turnIconFork }
 
         /**
-         * apply turn icon to the builder.
+         * apply fork left icon to the builder.
          * @param turnIconForkLeft Int
          * @return Builder
          */
@@ -899,7 +899,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconForkLeft = turnIconForkLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply fork right icon to the builder.
          * @param turnIconForkRight Int
          * @return Builder
          */
@@ -907,7 +907,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconForkRight = turnIconForkRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply fork straight icon to the builder.
          * @param turnIconForkStraight Int
          * @return Builder
          */
@@ -915,7 +915,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconForkStraight = turnIconForkStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply fork slight left icon to the builder.
          * @param turnIconForkSlightLeft Int
          * @return Builder
          */
@@ -923,7 +923,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconForkSlightLeft = turnIconForkSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply fork slight right icon to the builder.
          * @param turnIconForkSlightRight Int
          * @return Builder
          */
@@ -931,7 +931,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconForkSlightRight = turnIconForkSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid icon to the builder.
          * @param turnIconInvalid Int
          * @return Builder
          */
@@ -939,7 +939,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalid = turnIconInvalid }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid left icon to the builder.
          * @param turnIconInvalidLeft Int
          * @return Builder
          */
@@ -947,7 +947,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalidLeft = turnIconInvalidLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid right icon to the builder.
          * @param turnIconInvalidRight Int
          * @return Builder
          */
@@ -955,7 +955,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalidRight = turnIconInvalidRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid straight icon to the builder.
          * @param turnIconInvalidStraight Int
          * @return Builder
          */
@@ -963,7 +963,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalidStraight = turnIconInvalidStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid uturn icon to the builder.
          * @param turnIconInvalidUturn Int
          * @return Builder
          */
@@ -971,7 +971,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalidUturn = turnIconInvalidUturn }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid slight left icon to the builder.
          * @param turnIconInvalidSlightLeft Int
          * @return Builder
          */
@@ -979,7 +979,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalidSlightLeft = turnIconInvalidSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply invalid slight right icon to the builder.
          * @param turnIconInvalidSlightRight Int
          * @return Builder
          */
@@ -987,7 +987,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconInvalidSlightRight = turnIconInvalidSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply merge left icon to the builder.
          * @param turnIconMergeLeft Int
          * @return Builder
          */
@@ -995,7 +995,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconMergeLeft = turnIconMergeLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply merge right icon to the builder.
          * @param turnIconMergeRight Int
          * @return Builder
          */
@@ -1003,7 +1003,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconMergeRight = turnIconMergeRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply merge straight icon to the builder.
          * @param turnIconMergeStraight Int
          * @return Builder
          */
@@ -1011,7 +1011,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconMergeStraight = turnIconMergeStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply merge slight left icon to the builder.
          * @param turnIconMergeSlightLeft Int
          * @return Builder
          */
@@ -1019,7 +1019,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconMergeSlightLeft = turnIconMergeSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply merge slight right icon to the builder.
          * @param turnIconMergeSlightRight Int
          * @return Builder
          */
@@ -1027,7 +1027,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconMergeSlightRight = turnIconMergeSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn new name left to the builder.
          * @param turnIconNewNameLeft Int
          * @return Builder
          */
@@ -1035,7 +1035,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameLeft = turnIconNewNameLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply new name right icon to the builder.
          * @param turnIconNewNameRight Int
          * @return Builder
          */
@@ -1043,7 +1043,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameRight = turnIconNewNameRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply new name straight icon to the builder.
          * @param turnIconNewNameStraight Int
          * @return Builder
          */
@@ -1051,7 +1051,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameStraight = turnIconNewNameStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply new name slight left icon to the builder.
          * @param turnIconNewNameSlightLeft Int
          * @return Builder
          */
@@ -1059,7 +1059,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameSlightLeft = turnIconNewNameSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply new name slight right icon to the builder.
          * @param turnIconNewNameSlightRight Int
          * @return Builder
          */
@@ -1067,7 +1067,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameSlightRight = turnIconNewNameSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply new name sharp left icon to the builder.
          * @param turnIconNewNameSharpLeft Int
          * @return Builder
          */
@@ -1075,7 +1075,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameSharpLeft = turnIconNewNameSharpLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply new name sharp right icon to the builder.
          * @param turnIconNewNameSharpRight Int
          * @return Builder
          */
@@ -1083,7 +1083,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNewNameSharpRight = turnIconNewNameSharpRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification left icon to the builder.
          * @param turnIconNotificationLeft Int
          * @return Builder
          */
@@ -1091,7 +1091,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationLeft = turnIconNotificationLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification right icon to the builder.
          * @param turnIconNotificationRight Int
          * @return Builder
          */
@@ -1099,7 +1099,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationRight = turnIconNotificationRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification straight icon to the builder.
          * @param turnIconNotificationStraight Int
          * @return Builder
          */
@@ -1109,7 +1109,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationStraight = turnIconNotificationStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification slight left icon to the builder.
          * @param turnIconNotificationSlightLeft Int
          * @return Builder
          */
@@ -1119,7 +1119,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationSlightLeft = turnIconNotificationSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification slight right icon to the builder.
          * @param turnIconNotificationSlightRight Int
          * @return Builder
          */
@@ -1129,7 +1129,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationSlightRight = turnIconNotificationSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification sharp left icon to the builder.
          * @param turnIconNotificationSharpLeft Int
          * @return Builder
          */
@@ -1139,7 +1139,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationSharpLeft = turnIconNotificationSharpLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply notification sharp right icon to the builder.
          * @param turnIconNotificationSharpRight Int
          * @return Builder
          */
@@ -1149,7 +1149,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconNotificationSharpRight = turnIconNotificationSharpRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply off ramp icon to the builder.
          * @param turnIconOffRamp Int
          * @return Builder
          */
@@ -1157,7 +1157,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOffRamp = turnIconOffRamp }
 
         /**
-         * apply turn icon to the builder.
+         * apply off ramp left icon to the builder.
          * @param turnIconOffRampLeft Int
          * @return Builder
          */
@@ -1165,7 +1165,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOffRampLeft = turnIconOffRampLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply off ramp right icon to the builder.
          * @param turnIconOffRampRight Int
          * @return Builder
          */
@@ -1173,7 +1173,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOffRampRight = turnIconOffRampRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply off ramp slight left icon to the builder.
          * @param turnIconOffRampSlightLeft Int
          * @return Builder
          */
@@ -1181,7 +1181,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOffRampSlightLeft = turnIconOffRampSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply off ramp slight right icon to the builder.
          * @param turnIconOffRampSlightRight Int
          * @return Builder
          */
@@ -1189,7 +1189,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOffRampSlightRight = turnIconOffRampSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp icon to the builder.
          * @param turnIconOnRamp Int
          * @return Builder
          */
@@ -1197,7 +1197,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRamp = turnIconOnRamp }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp left icon to the builder.
          * @param turnIconOnRampLeft Int
          * @return Builder
          */
@@ -1205,7 +1205,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampLeft = turnIconOnRampLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp right icon to the builder.
          * @param turnIconOnRampRight Int
          * @return Builder
          */
@@ -1213,7 +1213,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampRight = turnIconOnRampRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp straight icon to the builder.
          * @param turnIconOnRampStraight Int
          * @return Builder
          */
@@ -1221,7 +1221,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampStraight = turnIconOnRampStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp slight left icon to the builder.
          * @param turnIconOnRampSlightLeft Int
          * @return Builder
          */
@@ -1229,7 +1229,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampSlightLeft = turnIconOnRampSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp slight right icon to the builder.
          * @param turnIconOnRampSlightRight Int
          * @return Builder
          */
@@ -1237,7 +1237,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampSlightRight = turnIconOnRampSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp sharp left icon to the builder.
          * @param turnIconOnRampSharpLeft Int
          * @return Builder
          */
@@ -1245,7 +1245,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampSharpLeft = turnIconOnRampSharpLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply on ramp sharp right icon to the builder.
          * @param turnIconOnRampSharpRight Int
          * @return Builder
          */
@@ -1253,7 +1253,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconOnRampSharpRight = turnIconOnRampSharpRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply ramp icon to the builder.
          * @param turnIconRamp Int
          * @return Builder
          */
@@ -1261,7 +1261,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRamp = turnIconRamp }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary icon to the builder.
          * @param turnIconRotary Int
          * @return Builder
          */
@@ -1269,7 +1269,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotary = turnIconRotary }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary left icon to the builder.
          * @param turnIconRotaryLeft Int
          * @return Builder
          */
@@ -1277,7 +1277,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotaryLeft = turnIconRotaryLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary right icon to the builder.
          * @param turnIconRotaryRight Int
          * @return Builder
          */
@@ -1285,7 +1285,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotaryRight = turnIconRotaryRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary straight icon to the builder.
          * @param turnIconRotaryStraight Int
          * @return Builder
          */
@@ -1293,7 +1293,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotaryStraight = turnIconRotaryStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary slight left icon to the builder.
          * @param turnIconRotarySlightLeft Int
          * @return Builder
          */
@@ -1301,7 +1301,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotarySlightLeft = turnIconRotarySlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary slight right icon to the builder.
          * @param turnIconRotarySlightRight Int
          * @return Builder
          */
@@ -1309,7 +1309,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotarySlightRight = turnIconRotarySlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary sharp left icon to the builder.
          * @param turnIconRotarySharpLeft Int
          * @return Builder
          */
@@ -1317,7 +1317,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotarySharpLeft = turnIconRotarySharpLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply rotary sharp right icon to the builder.
          * @param turnIconRotarySharpRight Int
          * @return Builder
          */
@@ -1325,7 +1325,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRotarySharpRight = turnIconRotarySharpRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout icon to the builder.
          * @param turnIconRoundabout Int
          * @return Builder
          */
@@ -1333,7 +1333,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundabout = turnIconRoundabout }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout left icon to the builder.
          * @param turnIconRoundaboutLeft Int
          * @return Builder
          */
@@ -1341,7 +1341,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutLeft = turnIconRoundaboutLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout right icon to the builder.
          * @param turnIconRoundaboutRight Int
          * @return Builder
          */
@@ -1349,7 +1349,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutRight = turnIconRoundaboutRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout straight icon to the builder.
          * @param turnIconRoundaboutStraight Int
          * @return Builder
          */
@@ -1357,7 +1357,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutStraight = turnIconRoundaboutStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout slight left icon to the builder.
          * @param turnIconRoundaboutSlightLeft Int
          * @return Builder
          */
@@ -1367,7 +1367,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutSlightLeft = turnIconRoundaboutSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout slight right icon to the builder.
          * @param turnIconRoundaboutSlightRight Int
          * @return Builder
          */
@@ -1377,7 +1377,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutSlightRight = turnIconRoundaboutSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout sharp left icon to the builder.
          * @param turnIconRoundaboutSharpLeft Int
          * @return Builder
          */
@@ -1385,7 +1385,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutSharpLeft = turnIconRoundaboutSharpLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply roundabout sharp right icon to the builder.
          * @param turnIconRoundaboutSharpRight Int
          * @return Builder
          */
@@ -1395,7 +1395,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconRoundaboutSharpRight = turnIconRoundaboutSharpRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn left icon to the builder.
          * @param turnIconTurnLeft Int
          * @return Builder
          */
@@ -1403,7 +1403,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnLeft = turnIconTurnLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn right icon to the builder.
          * @param turnIconTurnRight Int
          * @return Builder
          */
@@ -1411,7 +1411,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnRight = turnIconTurnRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn straight icon to the builder.
          * @param turnIconTurnStraight Int
          * @return Builder
          */
@@ -1419,7 +1419,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnStraight = turnIconTurnStraight }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn slight left icon to the builder.
          * @param turnIconTurnSlightLeft Int
          * @return Builder
          */
@@ -1427,7 +1427,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnSlightLeft = turnIconTurnSlightLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn slight right icon to the builder.
          * @param turnIconTurnSlightRight Int
          * @return Builder
          */
@@ -1435,7 +1435,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnSlightRight = turnIconTurnSlightRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn sharp left icon to the builder.
          * @param turnIconTurnSharpLeft Int
          * @return Builder
          */
@@ -1443,7 +1443,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnSharpLeft = turnIconTurnSharpLeft }
 
         /**
-         * apply turn icon to the builder.
+         * apply turn sharp right icon to the builder.
          * @param turnIconTurnSharpRight Int
          * @return Builder
          */
@@ -1451,7 +1451,7 @@ class TurnIconResources private constructor(
             apply { this.turnIconTurnSharpRight = turnIconTurnSharpRight }
 
         /**
-         * apply turn icon to the builder.
+         * apply uturn icon to the builder.
          * @param turnIconUturn Int
          * @return Builder
          */

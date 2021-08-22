@@ -19,7 +19,7 @@ import com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
-import com.mapbox.navigation.base.ExperimentalMapboxNavigationAPI
+import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.ui.maps.R
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
@@ -60,7 +60,7 @@ import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
  *
  * @param layerAbove layer in the current map style above which the debug layer with framed geometries should be placed
  */
-@ExperimentalMapboxNavigationAPI
+@ExperimentalPreviewMapboxNavigationAPI
 class MapboxNavigationViewportDataSourceDebugger @JvmOverloads constructor(
     private val context: Context,
     private val mapView: MapView,
@@ -141,12 +141,10 @@ class MapboxNavigationViewportDataSourceDebugger @JvmOverloads constructor(
         setBackgroundColor(Color.RED)
     }
 
-    private val cameraChangeListener = object : OnCameraChangeListener {
-        override fun onCameraChanged() {
-            mapView.post {
-                updateMapCameraCenter()
-                updateMapPadding()
-            }
+    private val cameraChangeListener = OnCameraChangeListener {
+        mapView.post {
+            updateMapCameraCenter()
+            updateMapPadding()
         }
     }
 
@@ -240,7 +238,7 @@ class MapboxNavigationViewportDataSourceDebugger @JvmOverloads constructor(
         }
 
         val style = mapboxMap.getStyle()
-        if (enabled && style != null && style.fullyLoaded) {
+        if (enabled && style != null && style.isStyleLoaded) {
             if (!style.styleSourceExists(pointsSourceId)) {
                 val source = geoJsonSource(pointsSourceId) { }.featureCollection(featureCollection)
                 style.addSource(source)

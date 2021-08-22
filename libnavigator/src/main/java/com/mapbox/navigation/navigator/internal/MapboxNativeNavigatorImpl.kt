@@ -1,30 +1,28 @@
 package com.mapbox.navigation.navigator.internal
 
-import android.os.SystemClock
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.base.common.logger.Logger
 import com.mapbox.base.common.logger.model.Message
 import com.mapbox.base.common.logger.model.Tag
 import com.mapbox.bindgen.Expected
 import com.mapbox.common.TileStore
-import com.mapbox.geojson.Geometry
-import com.mapbox.geojson.Point
-import com.mapbox.geojson.gson.GeometryGeoJson
 import com.mapbox.navigation.base.options.DeviceProfile
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.options.PredictiveCacheLocationOptions
 import com.mapbox.navigation.base.options.RoutingTilesOptions
-import com.mapbox.navigation.utils.internal.ifNonNull
 import com.mapbox.navigator.BannerInstruction
 import com.mapbox.navigator.CacheDataDomain
 import com.mapbox.navigator.CacheHandle
 import com.mapbox.navigator.ElectronicHorizonObserver
+import com.mapbox.navigator.Experimental
+import com.mapbox.navigator.FallbackVersionsObserver
 import com.mapbox.navigator.FixLocation
 import com.mapbox.navigator.GraphAccessor
 import com.mapbox.navigator.HistoryRecorderHandle
 import com.mapbox.navigator.NavigationStatus
 import com.mapbox.navigator.Navigator
 import com.mapbox.navigator.NavigatorConfig
+import com.mapbox.navigator.NavigatorObserver
 import com.mapbox.navigator.PredictiveCacheController
 import com.mapbox.navigator.PredictiveCacheControllerOptions
 import com.mapbox.navigator.PredictiveLocationTrackerOptions
@@ -34,15 +32,14 @@ import com.mapbox.navigator.RoadObjectsStoreObserver
 import com.mapbox.navigator.RouteInfo
 import com.mapbox.navigator.Router
 import com.mapbox.navigator.RouterError
-import com.mapbox.navigator.RouterResult
 import com.mapbox.navigator.SensorData
 import com.mapbox.navigator.TilesConfig
 import com.mapbox.navigator.VoiceInstruction
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
+import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -51,8 +48,6 @@ import kotlin.coroutines.suspendCoroutine
  */
 object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
 
-    private const val GRID_SIZE = 0.0025f
-    private const val BUFFER_DILATION: Short = 1
     private const val PRIMARY_ROUTE_INDEX = 0
     private const val SINGLE_THREAD = 1
     private const val TAG = "MbxNativeNavigatorImpl"
@@ -63,15 +58,18 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
     private val NavigatorDispatcher: CoroutineDispatcher =
         Executors.newFixedThreadPool(SINGLE_THREAD).asCoroutineDispatcher()
     private var navigator: Navigator? = null
+    // TODO migrate to RouterInterface
     private var nativeRouter: Router? = null
     private var historyRecorderHandle: HistoryRecorderHandle? = null
     private var route: DirectionsRoute? = null
-    private var routeBufferGeoJson: Geometry? = null
     override var graphAccessor: GraphAccessor? = null
     override var roadObjectMatcher: RoadObjectMatcher? = null
     override var roadObjectsStore: RoadObjectsStore? = null
+    override lateinit var experimental: Experimental
     override lateinit var cache: CacheHandle
     private var logger: Logger? = null
+    private val nativeNavigatorRecreationObservers =
+        CopyOnWriteArraySet<NativeNavigatorRecreationObserver>()
 
     // todo move to native
     const val OFFLINE_UUID = "offline"
@@ -86,12 +84,16 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
         deviceProfile: DeviceProfile,
         navigatorConfig: NavigatorConfig,
         tilesConfig: TilesConfig,
+        historyDir: String?,
         logger: Logger
     ): MapboxNativeNavigator {
+        navigator?.shutdown()
+
         val nativeComponents = NavigatorLoader.createNavigator(
             deviceProfile,
             navigatorConfig,
-            tilesConfig
+            tilesConfig,
+            historyDir,
         )
         navigator = nativeComponents.navigator
         nativeRouter = nativeComponents.nativeRouter
@@ -99,11 +101,27 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
         graphAccessor = nativeComponents.graphAccessor
         roadObjectMatcher = nativeComponents.roadObjectMatcher
         roadObjectsStore = nativeComponents.navigator.roadObjectStore()
+        experimental = nativeComponents.navigator.experimental
         cache = nativeComponents.cache
         route = null
-        routeBufferGeoJson = null
         this.logger = logger
         return this
+    }
+
+    /**
+     * Recreate native objects and notify listeners.
+     */
+    override fun recreate(
+        deviceProfile: DeviceProfile,
+        navigatorConfig: NavigatorConfig,
+        tilesConfig: TilesConfig,
+        historyDir: String?,
+        logger: Logger
+    ) {
+        create(deviceProfile, navigatorConfig, tilesConfig, historyDir, logger)
+        nativeNavigatorRecreationObservers.forEach {
+            it.onNativeNavigatorRecreated()
+        }
     }
 
     override fun resetRideSession() {
@@ -133,32 +151,11 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
         return navigator!!.updateSensorData(sensorData)
     }
 
-    /**
-     * Gets the status as an offset in time from the last fixed location. This
-     * allows the caller to get predicted statuses in the future along the route if
-     * the device is unable to get fixed locations. Poor reception would be one reason.
-     *
-     * This method uses previous fixes to snap the user's location to the route
-     * and verify that the user is still on the route. This method also determines
-     * if an instruction needs to be called out for the user.
-     *
-     * @param navigatorPredictionMillis millis for navigation status predictions.
-     *
-     * @return the last [TripStatus] as a result of fixed location updates. If the timestamp
-     * is earlier than a previous call, the last status will be returned. The function does not support re-winding time.
-     */
-    override suspend fun getStatus(navigatorPredictionMillis: Long): TripStatus =
-        withContext(NavigatorDispatcher) {
-            val nanos = SystemClock.elapsedRealtimeNanos() + TimeUnit.MILLISECONDS.toNanos(
-                navigatorPredictionMillis
-            )
-            val status = navigator!!.getStatus(nanos)
-            TripStatus(
-                route,
-                routeBufferGeoJson,
-                status
-            )
-        }
+    override fun addNavigatorObserver(navigatorObserver: NavigatorObserver) =
+        navigator!!.addObserver(navigatorObserver)
+
+    override fun removeNavigatorObserver(navigatorObserver: NavigatorObserver) =
+        navigator!!.removeObserver(navigatorObserver)
 
     // Routing
 
@@ -170,8 +167,8 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
      * @param route [DirectionsRoute] to follow.
      * @param legIndex Which leg to follow
      *
-     * @return a [NavigationStatus] route state if no errors occurred.
-     * Otherwise, it returns a invalid route state.
+     * @return a [RouteInfo] route state if no errors occurred.
+     * Otherwise, it returns null.
      */
     override suspend fun setRoute(
         route: DirectionsRoute?,
@@ -186,11 +183,6 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
                 ActiveGuidanceOptionsMapper.mapFrom(route)
             ).let { it.value }
 
-            val geometryWithBuffer = getRouteGeometryWithBuffer(GRID_SIZE, BUFFER_DILATION)
-            routeBufferGeoJson = ifNonNull(geometryWithBuffer) {
-                GeometryGeoJson.fromJson(it)
-            }
-
             result
         }
 
@@ -198,11 +190,7 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
      * Updates annotations so that subsequent calls to getStatus will
      * reflect the most current annotations for the route.
      *
-     * @param legAnnotationJson A string containing the json/pbf annotations
-     * @param routeIndex Which route to apply the annotation update to
-     * @param legIndex Which leg to apply the annotation update to
-     *
-     * @return True if the annotations could be updated false if not (wrong number of annotations)
+     * @param route [DirectionsRoute]
      */
     override suspend fun updateAnnotations(route: DirectionsRoute): Unit =
         withContext(NavigatorDispatcher) {
@@ -235,27 +223,6 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
         navigator!!.getBannerInstruction(index)
 
     /**
-     * Gets a polygon around the currently loaded route. The method uses a bitmap approach
-     * in which you specify a grid size (pixel size) and a dilation (how many pixels) to
-     * expand the initial grid cells that are intersected by the route.
-     *
-     * @param gridSize the size of the individual grid cells
-     * @param bufferDilation the number of pixels to dilate the initial intersection by it can
-     * be thought of as controlling the halo thickness around the route
-     *
-     * @return a geojson as [String] representing the route buffer polygon
-     */
-    override fun getRouteGeometryWithBuffer(gridSize: Float, bufferDilation: Short): String? {
-        return try {
-            navigator!!.getRouteBufferGeoJson(gridSize, bufferDilation)
-        } catch (error: Error) {
-            // failed to obtain the route buffer
-            // workaround for https://github.com/mapbox/mapbox-navigation-android/issues/2337
-            null
-        }
-    }
-
-    /**
      * Follows a new leg of the already loaded directions.
      * Returns an initialized navigation status if no errors occurred
      * otherwise, it returns an invalid navigation status state.
@@ -273,72 +240,20 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
      * Uses valhalla and local tile data to generate mapbox-directions-api-like json.
      *
      * @param url the directions-based uri used when hitting the http service
-     * @return a [RouterResult] object with the json and a success/fail boolean
+     * @return a JSON route object or [RouterError]
      */
     override suspend fun getRoute(url: String): Expected<RouterError, String> {
         return suspendCoroutine { continuation ->
-            nativeRouter!!.getRoute(url) {
-                continuation.resume(it)
+            nativeRouter!!.getRoute(url) { expected, _ ->
+                continuation.resume(expected)
             }
         }
     }
 
-    /**
-     * Passes in an input path to the tar file and output path.
-     *
-     * @param tarPath The path to the packed tiles.
-     * @param destinationPath The path to the unpacked files.
-     *
-     * @return the number of unpacked tiles
-     */
-    override fun unpackTiles(tarPath: String, destinationPath: String): Long =
-        Router.unpackTiles(tarPath, destinationPath)
-
-    /**
-     * Removes tiles wholly within the supplied bounding box. If the tile is not
-     * contained completely within the bounding box, it will remain in the cache.
-     * After removing files from the cache, any routers should be reconfigured
-     * to synchronize their in-memory cache with the disk.
-     *
-     * @param tilePath The path to the tiles.
-     * @param southwest The lower left coord of the bounding box.
-     * @param northeast The upper right coord of the bounding box.
-     *
-     * @return the number of tiles removed
-     */
-    override fun removeTiles(tilePath: String, southwest: Point, northeast: Point): Long =
-        Router.removeTiles(tilePath, southwest, northeast)
-
     // History traces
 
-    /**
-     * Gets the history of state-changing calls to the navigator. This can be used to
-     * replay a sequence of events for the purpose of bug fixing.
-     *
-     * @return a json representing the series of events that happened since the last time
-     * the history was toggled on.
-     */
-    override fun getHistory(): String = String(historyRecorderHandle?.history ?: byteArrayOf())
-
-    /**
-     * Toggles the recording of history on or off.
-     * Toggling will reset all history calls [getHistory] first before toggling to retain a copy.
-     *
-     * @param isEnabled set this to true to turn on history recording and false to turn it off
-     */
-    override fun toggleHistory(isEnabled: Boolean) {
-        historyRecorderHandle?.enable(isEnabled)
-    }
-
-    /**
-     * Adds a custom event to the navigator's history. This can be useful to log things that
-     * happen during navigation that are specific to your application.
-     *
-     * @param eventType the event type in the events log for your custom event
-     * @param eventJsonProperties the json to attach to the "properties" key of the event
-     */
-    override fun addHistoryEvent(eventType: String, eventJsonProperties: String) {
-        historyRecorderHandle?.pushHistory(eventType, eventJsonProperties)
+    override fun getHistoryRecorderHandle(): HistoryRecorderHandle? {
+        return historyRecorderHandle
     }
 
     // Other
@@ -393,6 +308,23 @@ object MapboxNativeNavigatorImpl : MapboxNativeNavigator {
      */
     override fun setRoadObjectsStoreObserver(roadObjectsStoreObserver: RoadObjectsStoreObserver?) {
         roadObjectsStore?.setObserver(roadObjectsStoreObserver)
+    }
+
+    override fun setFallbackVersionsObserver(fallbackVersionsObserver: FallbackVersionsObserver?) {
+        navigator!!.setFallbackVersionsObserver(fallbackVersionsObserver)
+    }
+
+    override fun setNativeNavigatorRecreationObserver(
+        nativeNavigatorRecreationObserver: NativeNavigatorRecreationObserver
+    ) {
+        nativeNavigatorRecreationObservers.add(nativeNavigatorRecreationObserver)
+    }
+
+    override fun unregisterAllObservers() {
+        navigator!!.setElectronicHorizonObserver(null)
+        navigator!!.setFallbackVersionsObserver(null)
+        roadObjectsStore?.setObserver(null)
+        nativeNavigatorRecreationObservers.clear()
     }
 
     /**

@@ -4,6 +4,9 @@ package com.mapbox.navigation.base {
   @kotlin.RequiresOptIn(level=kotlin.RequiresOptIn.Level) @kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention) @kotlin.annotation.Target(allowedTargets={kotlin.annotation.AnnotationTarget, kotlin.annotation.AnnotationTarget, kotlin.annotation.AnnotationTarget}) public @interface ExperimentalMapboxNavigationAPI {
   }
 
+  @kotlin.RequiresOptIn(level=kotlin.RequiresOptIn.Level) @kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention) @kotlin.annotation.Target(allowedTargets={kotlin.annotation.AnnotationTarget, kotlin.annotation.AnnotationTarget, kotlin.annotation.AnnotationTarget}) public @interface ExperimentalPreviewMapboxNavigationAPI {
+  }
+
   public final class TimeFormat {
     field public static final com.mapbox.navigation.base.TimeFormat INSTANCE;
     field public static final int NONE_SPECIFIED = -1; // 0xffffffff
@@ -23,7 +26,6 @@ package com.mapbox.navigation.base.extensions {
     method public static com.mapbox.api.directions.v5.models.RouteOptions.Builder applyLanguageAndVoiceUnitOptions(com.mapbox.api.directions.v5.models.RouteOptions.Builder, android.content.Context context);
     method public static com.mapbox.api.directions.v5.models.RouteOptions.Builder coordinates(com.mapbox.api.directions.v5.models.RouteOptions.Builder, com.mapbox.geojson.Point origin, java.util.List<com.mapbox.geojson.Point>? waypoints = null, com.mapbox.geojson.Point destination);
     method public static com.mapbox.api.directions.v5.models.RouteOptions.Builder coordinates(com.mapbox.api.directions.v5.models.RouteOptions.Builder, com.mapbox.geojson.Point origin, com.mapbox.geojson.Point destination);
-    method public static boolean supportsRouteRefresh(com.mapbox.api.directions.v5.models.RouteOptions?);
   }
 
 }
@@ -159,6 +161,34 @@ package com.mapbox.navigation.base.options {
     method public com.mapbox.navigation.base.options.EHorizonOptions.Builder minTimeDeltaBetweenUpdates(Double? minTimeDeltaBetweenUpdates);
   }
 
+  public final class EventsAppMetadata {
+    method public String getName();
+    method public String? getUserId();
+    method public String getVersion();
+    method public com.mapbox.navigation.base.options.EventsAppMetadata.Builder toBuilder();
+    property public final String name;
+    property public final String? userId;
+    property public final String version;
+  }
+
+  public static final class EventsAppMetadata.Builder {
+    ctor public EventsAppMetadata.Builder(String name, String version);
+    method public com.mapbox.navigation.base.options.EventsAppMetadata build();
+    method public com.mapbox.navigation.base.options.EventsAppMetadata.Builder userId(String? userId);
+  }
+
+  public final class HistoryRecorderOptions {
+    method public String? getFileDirectory();
+    method public com.mapbox.navigation.base.options.HistoryRecorderOptions.Builder toBuilder();
+    property public final String? fileDirectory;
+  }
+
+  public static final class HistoryRecorderOptions.Builder {
+    ctor public HistoryRecorderOptions.Builder();
+    method public com.mapbox.navigation.base.options.HistoryRecorderOptions build();
+    method public com.mapbox.navigation.base.options.HistoryRecorderOptions.Builder fileDirectory(String? filePath);
+  }
+
   public final class IncidentsOptions {
     method public String getApiUrl();
     method public String getGraph();
@@ -180,11 +210,12 @@ package com.mapbox.navigation.base.options {
     method public com.mapbox.navigation.base.options.DeviceProfile getDeviceProfile();
     method public com.mapbox.navigation.base.formatter.DistanceFormatterOptions getDistanceFormatterOptions();
     method public com.mapbox.navigation.base.options.EHorizonOptions getEHorizonOptions();
+    method public com.mapbox.navigation.base.options.EventsAppMetadata? getEventsAppMetadata();
+    method public com.mapbox.navigation.base.options.HistoryRecorderOptions getHistoryRecorderOptions();
     method public com.mapbox.navigation.base.options.IncidentsOptions getIncidentsOptions();
     method public com.mapbox.android.core.location.LocationEngine getLocationEngine();
     method public com.mapbox.android.core.location.LocationEngineRequest getLocationEngineRequest();
     method public long getNavigatorPredictionMillis();
-    method public com.mapbox.navigation.base.options.PredictiveCacheLocationOptions getPredictiveCacheLocationOptions();
     method public com.mapbox.navigation.base.route.RouteAlternativesOptions getRouteAlternativesOptions();
     method public com.mapbox.navigation.base.route.RouteRefreshOptions getRouteRefreshOptions();
     method public com.mapbox.navigation.base.options.RoutingTilesOptions getRoutingTilesOptions();
@@ -197,13 +228,14 @@ package com.mapbox.navigation.base.options {
     property public final com.mapbox.navigation.base.options.DeviceProfile deviceProfile;
     property public final com.mapbox.navigation.base.formatter.DistanceFormatterOptions distanceFormatterOptions;
     property public final com.mapbox.navigation.base.options.EHorizonOptions eHorizonOptions;
+    property public final com.mapbox.navigation.base.options.EventsAppMetadata? eventsAppMetadata;
+    property public final com.mapbox.navigation.base.options.HistoryRecorderOptions historyRecorderOptions;
     property public final com.mapbox.navigation.base.options.IncidentsOptions incidentsOptions;
     property public final boolean isDebugLoggingEnabled;
     property public final boolean isFromNavigationUi;
     property public final com.mapbox.android.core.location.LocationEngine locationEngine;
     property public final com.mapbox.android.core.location.LocationEngineRequest locationEngineRequest;
     property public final long navigatorPredictionMillis;
-    property public final com.mapbox.navigation.base.options.PredictiveCacheLocationOptions predictiveCacheLocationOptions;
     property public final com.mapbox.navigation.base.route.RouteAlternativesOptions routeAlternativesOptions;
     property public final com.mapbox.navigation.base.route.RouteRefreshOptions routeRefreshOptions;
     property public final com.mapbox.navigation.base.options.RoutingTilesOptions routingTilesOptions;
@@ -217,13 +249,14 @@ package com.mapbox.navigation.base.options {
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder deviceProfile(com.mapbox.navigation.base.options.DeviceProfile deviceProfile);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder distanceFormatterOptions(com.mapbox.navigation.base.formatter.DistanceFormatterOptions distanceFormatterOptions);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder eHorizonOptions(com.mapbox.navigation.base.options.EHorizonOptions eHorizonOptions);
+    method public com.mapbox.navigation.base.options.NavigationOptions.Builder eventsAppMetadata(com.mapbox.navigation.base.options.EventsAppMetadata? eventsAppMetadata);
+    method public com.mapbox.navigation.base.options.NavigationOptions.Builder historyRecorderOptions(com.mapbox.navigation.base.options.HistoryRecorderOptions historyRecorderOptions);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder incidentsOptions(com.mapbox.navigation.base.options.IncidentsOptions incidentsOptions);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder isDebugLoggingEnabled(boolean flag);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder isFromNavigationUi(boolean flag);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder locationEngine(com.mapbox.android.core.location.LocationEngine locationEngine);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder locationEngineRequest(com.mapbox.android.core.location.LocationEngineRequest locationEngineRequest);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder navigatorPredictionMillis(long predictionMillis);
-    method public com.mapbox.navigation.base.options.NavigationOptions.Builder predictiveCacheLocationOptions(com.mapbox.navigation.base.options.PredictiveCacheLocationOptions predictiveCacheLocationOptions);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder routeAlternativesOptions(com.mapbox.navigation.base.route.RouteAlternativesOptions routeAlternativesOptions);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder routeRefreshOptions(com.mapbox.navigation.base.route.RouteRefreshOptions routeRefreshOptions);
     method public com.mapbox.navigation.base.options.NavigationOptions.Builder routingTilesOptions(com.mapbox.navigation.base.options.RoutingTilesOptions routingTilesOptions);
@@ -231,7 +264,7 @@ package com.mapbox.navigation.base.options {
   }
 
   public final class NavigationOptionsKt {
-    field public static final long DEFAULT_NAVIGATOR_PREDICTION_MILLIS = 1100L; // 0x44cL
+    field public static final long DEFAULT_NAVIGATOR_PREDICTION_MILLIS = 1000L; // 0x3e8L
   }
 
   public final class PredictiveCacheLocationOptions {
@@ -349,17 +382,14 @@ package com.mapbox.navigation.base.route {
   }
 
   public final class RouteRefreshOptions {
-    method public boolean getEnabled();
     method public long getIntervalMillis();
     method public com.mapbox.navigation.base.route.RouteRefreshOptions.Builder toBuilder();
-    property public final boolean enabled;
     property public final long intervalMillis;
   }
 
   public static final class RouteRefreshOptions.Builder {
     ctor public RouteRefreshOptions.Builder();
     method public com.mapbox.navigation.base.route.RouteRefreshOptions build();
-    method public com.mapbox.navigation.base.route.RouteRefreshOptions.Builder enabled(boolean enabled);
     method public com.mapbox.navigation.base.route.RouteRefreshOptions.Builder intervalMillis(long intervalMillis);
   }
 
@@ -367,15 +397,56 @@ package com.mapbox.navigation.base.route {
     method public void cancelAll();
     method public void cancelRouteRefreshRequest(long requestId);
     method public void cancelRouteRequest(long requestId);
-    method public long getRoute(com.mapbox.api.directions.v5.models.RouteOptions routeOptions, com.mapbox.navigation.base.route.Router.Callback callback);
+    method public long getRoute(com.mapbox.api.directions.v5.models.RouteOptions routeOptions, com.mapbox.navigation.base.route.RouterCallback callback);
     method public long getRouteRefresh(com.mapbox.api.directions.v5.models.DirectionsRoute route, int legIndex, com.mapbox.navigation.base.route.RouteRefreshCallback callback);
     method public void shutdown();
   }
 
-  public static interface Router.Callback {
-    method public void onCanceled();
-    method public void onFailure(Throwable throwable);
-    method public void onResponse(java.util.List<? extends com.mapbox.api.directions.v5.models.DirectionsRoute> routes);
+  public interface RouterCallback {
+    method public void onCanceled(com.mapbox.api.directions.v5.models.RouteOptions routeOptions, com.mapbox.navigation.base.route.RouterOrigin routerOrigin);
+    method public void onFailure(java.util.List<com.mapbox.navigation.base.route.RouterFailure> reasons, com.mapbox.api.directions.v5.models.RouteOptions routeOptions);
+    method public void onRoutesReady(java.util.List<? extends com.mapbox.api.directions.v5.models.DirectionsRoute> routes, com.mapbox.navigation.base.route.RouterOrigin routerOrigin);
+  }
+
+  public final class RouterFailure {
+    ctor public RouterFailure(java.net.URL url, com.mapbox.navigation.base.route.RouterOrigin routerOrigin, String message, Integer? code = null, Throwable? throwable = null);
+    ctor public RouterFailure(java.net.URL url, com.mapbox.navigation.base.route.RouterOrigin routerOrigin, String message, Integer? code = null);
+    ctor public RouterFailure(java.net.URL url, com.mapbox.navigation.base.route.RouterOrigin routerOrigin, String message);
+    method public java.net.URL component1();
+    method public com.mapbox.navigation.base.route.RouterOrigin component2();
+    method public String component3();
+    method public Integer? component4();
+    method public Throwable? component5();
+    method public com.mapbox.navigation.base.route.RouterFailure copy(java.net.URL url, com.mapbox.navigation.base.route.RouterOrigin routerOrigin, String message, Integer? code, Throwable? throwable);
+    method public Integer? getCode();
+    method public String getMessage();
+    method public com.mapbox.navigation.base.route.RouterOrigin getRouterOrigin();
+    method public Throwable? getThrowable();
+    method public java.net.URL getUrl();
+    property public final Integer? code;
+    property public final String message;
+    property public final com.mapbox.navigation.base.route.RouterOrigin routerOrigin;
+    property public final Throwable? throwable;
+    property public final java.net.URL url;
+  }
+
+  public abstract sealed class RouterOrigin {
+  }
+
+  public static final class RouterOrigin.Custom extends com.mapbox.navigation.base.route.RouterOrigin {
+    ctor public RouterOrigin.Custom(Object? obj = null);
+    method public Object? component1();
+    method public com.mapbox.navigation.base.route.RouterOrigin.Custom copy(Object? obj);
+    method public Object? getObj();
+    property public final Object? obj;
+  }
+
+  public static final class RouterOrigin.Offboard extends com.mapbox.navigation.base.route.RouterOrigin {
+    field public static final com.mapbox.navigation.base.route.RouterOrigin.Offboard INSTANCE;
+  }
+
+  public static final class RouterOrigin.Onboard extends com.mapbox.navigation.base.route.RouterOrigin {
+    field public static final com.mapbox.navigation.base.route.RouterOrigin.Onboard INSTANCE;
   }
 
 }
@@ -426,7 +497,6 @@ package com.mapbox.navigation.base.trip.model {
     method public int getLegIndex();
     method public com.mapbox.api.directions.v5.models.RouteLeg? getRouteLeg();
     method public com.mapbox.api.directions.v5.models.LegStep? getUpcomingStep();
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder toBuilder();
     property public final com.mapbox.navigation.base.trip.model.RouteStepProgress? currentStepProgress;
     property public final float distanceRemaining;
     property public final float distanceTraveled;
@@ -435,19 +505,6 @@ package com.mapbox.navigation.base.trip.model {
     property public final int legIndex;
     property public final com.mapbox.api.directions.v5.models.RouteLeg? routeLeg;
     property public final com.mapbox.api.directions.v5.models.LegStep? upcomingStep;
-  }
-
-  public static final class RouteLegProgress.Builder {
-    ctor public RouteLegProgress.Builder();
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress build();
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder currentStepProgress(com.mapbox.navigation.base.trip.model.RouteStepProgress? currentStepProgress);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder distanceRemaining(float distanceRemaining);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder distanceTraveled(float distanceTraveled);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder durationRemaining(double durationRemaining);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder fractionTraveled(float fractionTraveled);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder legIndex(int legIndex);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder routeLeg(com.mapbox.api.directions.v5.models.RouteLeg? routeLeg);
-    method public com.mapbox.navigation.base.trip.model.RouteLegProgress.Builder upcomingStep(com.mapbox.api.directions.v5.models.LegStep? upcomingStep);
   }
 
   public final class RouteProgress {
@@ -461,12 +518,10 @@ package com.mapbox.navigation.base.trip.model {
     method public boolean getInTunnel();
     method public int getRemainingWaypoints();
     method public com.mapbox.api.directions.v5.models.DirectionsRoute getRoute();
-    method public com.mapbox.geojson.Geometry? getRouteGeometryWithBuffer();
     method public boolean getStale();
     method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.UpcomingRoadObject> getUpcomingRoadObjects();
     method public java.util.List<com.mapbox.geojson.Point>? getUpcomingStepPoints();
     method public com.mapbox.api.directions.v5.models.VoiceInstructions? getVoiceInstructions();
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder toBuilder();
     property public final com.mapbox.api.directions.v5.models.BannerInstructions? bannerInstructions;
     property public final com.mapbox.navigation.base.trip.model.RouteLegProgress? currentLegProgress;
     property public final com.mapbox.navigation.base.trip.model.RouteProgressState currentState;
@@ -477,30 +532,10 @@ package com.mapbox.navigation.base.trip.model {
     property public final boolean inTunnel;
     property public final int remainingWaypoints;
     property public final com.mapbox.api.directions.v5.models.DirectionsRoute route;
-    property public final com.mapbox.geojson.Geometry? routeGeometryWithBuffer;
     property public final boolean stale;
     property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.UpcomingRoadObject> upcomingRoadObjects;
     property public final java.util.List<com.mapbox.geojson.Point>? upcomingStepPoints;
     property public final com.mapbox.api.directions.v5.models.VoiceInstructions? voiceInstructions;
-  }
-
-  public static final class RouteProgress.Builder {
-    ctor public RouteProgress.Builder(com.mapbox.api.directions.v5.models.DirectionsRoute route);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder bannerInstructions(com.mapbox.api.directions.v5.models.BannerInstructions? bannerInstructions);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress build();
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder currentLegProgress(com.mapbox.navigation.base.trip.model.RouteLegProgress? legProgress);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder currentState(com.mapbox.navigation.base.trip.model.RouteProgressState currentState);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder distanceRemaining(float distanceRemaining);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder distanceTraveled(float distanceTraveled);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder durationRemaining(double durationRemaining);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder fractionTraveled(float fractionTraveled);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder inTunnel(boolean inTunnel);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder remainingWaypoints(int remainingWaypoints);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder routeGeometryWithBuffer(com.mapbox.geojson.Geometry? routeGeometryWithBuffer);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder stale(boolean stale);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder upcomingRoadObjects(java.util.List<com.mapbox.navigation.base.trip.model.roadobject.UpcomingRoadObject> upcomingRoadObjects);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder upcomingStepPoints(java.util.List<com.mapbox.geojson.Point>? upcomingStepPoints);
-    method public com.mapbox.navigation.base.trip.model.RouteProgress.Builder voiceInstructions(com.mapbox.api.directions.v5.models.VoiceInstructions? voiceInstructions);
   }
 
   public enum RouteProgressState {
@@ -516,32 +551,42 @@ package com.mapbox.navigation.base.trip.model {
     method public float getDistanceTraveled();
     method public double getDurationRemaining();
     method public float getFractionTraveled();
+    method public Integer? getInstructionIndex();
     method public int getIntersectionIndex();
     method public com.mapbox.api.directions.v5.models.LegStep? getStep();
     method public int getStepIndex();
     method public java.util.List<com.mapbox.geojson.Point>? getStepPoints();
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder toBuilder();
     property public final float distanceRemaining;
     property public final float distanceTraveled;
     property public final double durationRemaining;
     property public final float fractionTraveled;
+    property public final Integer? instructionIndex;
     property public final int intersectionIndex;
     property public final com.mapbox.api.directions.v5.models.LegStep? step;
     property public final int stepIndex;
     property public final java.util.List<com.mapbox.geojson.Point>? stepPoints;
   }
 
-  public static final class RouteStepProgress.Builder {
-    ctor public RouteStepProgress.Builder();
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress build();
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder distanceRemaining(float distanceRemaining);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder distanceTraveled(float distanceTraveled);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder durationRemaining(double durationRemaining);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder fractionTraveled(float fractionTraveled);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder intersectionIndex(int intersectionIndex);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder step(com.mapbox.api.directions.v5.models.LegStep? step);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder stepIndex(int stepIndex);
-    method public com.mapbox.navigation.base.trip.model.RouteStepProgress.Builder stepPoints(java.util.List<com.mapbox.geojson.Point>? stepPoints);
+  public abstract sealed class TripNotificationState {
+  }
+
+  public static final class TripNotificationState.TripNotificationData extends com.mapbox.navigation.base.trip.model.TripNotificationState {
+    method public com.mapbox.api.directions.v5.models.BannerInstructions? component1();
+    method public Double? component2();
+    method public Double? component3();
+    method public String? component4();
+    method public com.mapbox.navigation.base.trip.model.TripNotificationState.TripNotificationData copy(com.mapbox.api.directions.v5.models.BannerInstructions? bannerInstructions, Double? distanceRemaining, Double? durationRemaining, String? drivingSide);
+    method public com.mapbox.api.directions.v5.models.BannerInstructions? getBannerInstructions();
+    method public Double? getDistanceRemaining();
+    method public String? getDrivingSide();
+    method public Double? getDurationRemaining();
+    property public final com.mapbox.api.directions.v5.models.BannerInstructions? bannerInstructions;
+    property public final Double? distanceRemaining;
+    property public final String? drivingSide;
+    property public final Double? durationRemaining;
+  }
+
+  public static final class TripNotificationState.TripNotificationFreeState extends com.mapbox.navigation.base.trip.model.TripNotificationState {
   }
 
 }
@@ -581,6 +626,7 @@ package com.mapbox.navigation.base.trip.model.eh {
     method public boolean getMotorway();
     method public java.util.List<com.mapbox.navigation.base.trip.model.eh.RoadName> getNames();
     method public boolean getRamp();
+    method public String getRoadSurface();
     method public double getSpeed();
     method public Double? getSpeedLimit();
     method public String? getStateCode();
@@ -602,6 +648,7 @@ package com.mapbox.navigation.base.trip.model.eh {
     property public final boolean motorway;
     property public final java.util.List<com.mapbox.navigation.base.trip.model.eh.RoadName> names;
     property public final boolean ramp;
+    property public final String roadSurface;
     property public final double speed;
     property public final Double? speedLimit;
     property public final String? stateCode;
@@ -677,6 +724,21 @@ package com.mapbox.navigation.base.trip.model.eh {
     method public boolean getShielded();
     property public final String name;
     property public final boolean shielded;
+  }
+
+  public final class RoadSurface {
+    field public static final String COMPACTED = "COMPACTED";
+    field public static final String DIRT = "DIRT";
+    field public static final String GRAVEL = "GRAVEL";
+    field public static final String IMPASSABLE = "IMPASSABLE";
+    field public static final com.mapbox.navigation.base.trip.model.eh.RoadSurface INSTANCE;
+    field public static final String PATH = "PATH";
+    field public static final String PAVED = "PAVED";
+    field public static final String PAVED_ROUGH = "PAVED_ROUGH";
+    field public static final String PAVED_SMOOTH = "PAVED_SMOOTH";
+  }
+
+  @StringDef({com.mapbox.navigation.base.trip.model.eh.RoadSurface.PAVED_SMOOTH, com.mapbox.navigation.base.trip.model.eh.RoadSurface.PAVED, com.mapbox.navigation.base.trip.model.eh.RoadSurface.PAVED_ROUGH, com.mapbox.navigation.base.trip.model.eh.RoadSurface.COMPACTED, com.mapbox.navigation.base.trip.model.eh.RoadSurface.DIRT, com.mapbox.navigation.base.trip.model.eh.RoadSurface.GRAVEL, com.mapbox.navigation.base.trip.model.eh.RoadSurface.PATH, com.mapbox.navigation.base.trip.model.eh.RoadSurface.IMPASSABLE}) @kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention) public static @interface RoadSurface.Type {
   }
 
 }
@@ -762,10 +824,10 @@ package com.mapbox.navigation.base.trip.model.roadobject {
 
   public final class UpcomingRoadObject {
     method public com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo? getDistanceInfo();
-    method public double getDistanceToStart();
+    method public Double? getDistanceToStart();
     method public com.mapbox.navigation.base.trip.model.roadobject.RoadObject getRoadObject();
     property public final com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo? distanceInfo;
-    property public final double distanceToStart;
+    property public final Double? distanceToStart;
     property public final com.mapbox.navigation.base.trip.model.roadobject.RoadObject roadObject;
   }
 
@@ -811,48 +873,59 @@ package com.mapbox.navigation.base.trip.model.roadobject.custom {
 package com.mapbox.navigation.base.trip.model.roadobject.distanceinfo {
 
   public final class GantryDistanceInfo extends com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo {
-    method public double getDistanceToStart();
-    property public double distanceToStart;
+    method public Double getDistanceToStart();
+    property public Double distanceToStart;
+  }
+
+  public final class Gate {
+    method public double getDistance();
+    method public int getId();
+    method public com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition getPosition();
+    method public double getProbability();
+    property public final double distance;
+    property public final int id;
+    property public final com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition position;
+    property public final double probability;
   }
 
   public final class LineDistanceInfo extends com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo {
     method public double getDistanceToEnd();
     method public double getDistanceToEntry();
     method public double getDistanceToExit();
-    method public double getDistanceToStart();
+    method public Double getDistanceToStart();
     method public boolean getEntryFromStart();
     method public double getLength();
     property public final double distanceToEnd;
     property public final double distanceToEntry;
     property public final double distanceToExit;
-    property public double distanceToStart;
+    property public Double distanceToStart;
     property public final boolean entryFromStart;
     property public final double length;
   }
 
   public final class PointDistanceInfo extends com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo {
-    method public double getDistanceToStart();
-    property public double distanceToStart;
+    method public Double getDistanceToStart();
+    property public Double distanceToStart;
   }
 
   public final class PolygonDistanceInfo extends com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo {
-    method public double getDistanceToNearestEntry();
-    method public double getDistanceToNearestExit();
-    method public double getDistanceToStart();
+    method public Double? getDistanceToStart();
+    method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> getEntrances();
+    method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> getExits();
     method public boolean getInside();
-    property public final double distanceToNearestEntry;
-    property public final double distanceToNearestExit;
-    property public double distanceToStart;
+    property public Double? distanceToStart;
+    property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> entrances;
+    property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> exits;
     property public final boolean inside;
   }
 
   public abstract class RoadObjectDistanceInfo {
     method public final int getDistanceInfoType();
-    method public abstract double getDistanceToStart();
+    method public abstract Double? getDistanceToStart();
     method public final String getRoadObjectId();
     method public final int getRoadObjectType();
     property public final int distanceInfoType;
-    property public abstract double distanceToStart;
+    property public abstract Double? distanceToStart;
     property public final String roadObjectId;
     property public final int roadObjectType;
   }
@@ -870,13 +943,13 @@ package com.mapbox.navigation.base.trip.model.roadobject.distanceinfo {
   }
 
   public final class SubGraphDistanceInfo extends com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.RoadObjectDistanceInfo {
-    method public double getDistanceToNearestEntry();
-    method public double getDistanceToNearestExit();
-    method public double getDistanceToStart();
+    method public Double? getDistanceToStart();
+    method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> getEntrances();
+    method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> getExits();
     method public boolean getInside();
-    property public final double distanceToNearestEntry;
-    property public final double distanceToNearestExit;
-    property public double distanceToStart;
+    property public Double? distanceToStart;
+    property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> entrances;
+    property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate> exits;
     property public final boolean inside;
   }
 
@@ -909,11 +982,17 @@ package com.mapbox.navigation.base.trip.model.roadobject.incident {
   public final class IncidentInfo {
     method public java.util.List<java.lang.Integer>? getAlertcCodes();
     method public com.mapbox.navigation.base.trip.model.roadobject.incident.IncidentCongestion? getCongestion();
+    method public String? getCountryCodeAlpha2();
+    method public String? getCountryCodeAlpha3();
     method public java.util.Date? getCreationTime();
     method public String? getDescription();
     method public java.util.Date? getEndTime();
     method public String getId();
     method public String getImpact();
+    method public java.util.List<java.lang.String> getLanesBlocked();
+    method public String? getLanesClearDesc();
+    method public String? getLongDescription();
+    method public Long? getNumLanesBlocked();
     method public java.util.Date? getStartTime();
     method public String? getSubType();
     method public String? getSubTypeDescription();
@@ -921,12 +1000,18 @@ package com.mapbox.navigation.base.trip.model.roadobject.incident {
     method public boolean isClosed();
     property public final java.util.List<java.lang.Integer>? alertcCodes;
     property public final com.mapbox.navigation.base.trip.model.roadobject.incident.IncidentCongestion? congestion;
+    property public final String? countryCodeAlpha2;
+    property public final String? countryCodeAlpha3;
     property public final java.util.Date? creationTime;
     property public final String? description;
     property public final java.util.Date? endTime;
     property public final String id;
     property public final String impact;
     property public final boolean isClosed;
+    property public final java.util.List<java.lang.String> lanesBlocked;
+    property public final String? lanesClearDesc;
+    property public final String? longDescription;
+    property public final Long? numLanesBlocked;
     property public final java.util.Date? startTime;
     property public final String? subType;
     property public final String? subTypeDescription;
@@ -1031,12 +1116,35 @@ package com.mapbox.navigation.base.trip.model.roadobject.location {
     field public static final int POLYGON = 4; // 0x4
     field public static final int POLYLINE = 5; // 0x5
     field public static final int ROUTE_ALERT = 6; // 0x6
+    field public static final int SUBGRAPH = 7; // 0x7
   }
 
-  @IntDef({com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.GANTRY, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.OPEN_LR_LINE, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.OPEN_LR_POINT, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.POINT, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.POLYGON, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.POLYLINE, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.ROUTE_ALERT}) @kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention) public static @interface RoadObjectLocationType.Type {
+  @IntDef({com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.GANTRY, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.OPEN_LR_LINE, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.OPEN_LR_POINT, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.POINT, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.POLYGON, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.POLYLINE, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.ROUTE_ALERT, com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocationType.SUBGRAPH}) @kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention) public static @interface RoadObjectLocationType.Type {
   }
 
   public final class RouteAlertLocation extends com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocation {
+  }
+
+  public final class SubgraphEdge {
+    method public long getId();
+    method public java.util.List<java.lang.Long> getInnerEdgeIds();
+    method public double getLength();
+    method public java.util.List<java.lang.Long> getOuterEdgeIds();
+    method public com.mapbox.geojson.Geometry getShape();
+    property public final long id;
+    property public final java.util.List<java.lang.Long> innerEdgeIds;
+    property public final double length;
+    property public final java.util.List<java.lang.Long> outerEdgeIds;
+    property public final com.mapbox.geojson.Geometry shape;
+  }
+
+  public final class SubgraphLocation extends com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocation {
+    method public java.util.Map<java.lang.Long,com.mapbox.navigation.base.trip.model.roadobject.location.SubgraphEdge> getEdges();
+    method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition> getEntries();
+    method public java.util.List<com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition> getExits();
+    property public final java.util.Map<java.lang.Long,com.mapbox.navigation.base.trip.model.roadobject.location.SubgraphEdge> edges;
+    property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition> entries;
+    property public final java.util.List<com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition> exits;
   }
 
 }
@@ -1111,7 +1219,7 @@ package com.mapbox.navigation.base.trip.notification {
     method public int getNotificationId();
     method public void onTripSessionStarted();
     method public void onTripSessionStopped();
-    method public void updateNotification(com.mapbox.navigation.base.trip.model.RouteProgress? routeProgress);
+    method public void updateNotification(com.mapbox.navigation.base.trip.model.TripNotificationState state);
   }
 
 }

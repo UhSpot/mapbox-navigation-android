@@ -20,18 +20,22 @@ import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.base.trip.model.RouteProgressState
 import com.mapbox.navigation.testing.FileUtils.loadJsonFixture
 import com.mapbox.navigation.testing.MainCoroutineRule
+import com.mapbox.navigation.ui.base.internal.model.route.RouteConstants
 import com.mapbox.navigation.ui.base.model.route.RouteLayerConstants.ALTERNATIVE_ROUTE1_LAYER_ID
 import com.mapbox.navigation.ui.base.util.MapboxNavigationConsumer
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.clearRouteLine
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.findClosestRoute
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.getRouteDrawData
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.setRoutes
-import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.updateToPrimaryRoute
+import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.showRouteWithLegIndexHighlighted
+import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineUtils
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineUtils.parseRoutePoints
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLine
+import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineError
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineGranularDistances
+import com.mapbox.navigation.ui.maps.route.line.model.RouteLineResources
 import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue
 import com.mapbox.navigation.ui.maps.route.line.model.RouteStyleDescriptor
 import com.mapbox.navigation.ui.maps.route.line.model.VanishingPointState
@@ -55,6 +59,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -100,55 +105,6 @@ class MapboxRouteLineApiTest {
         assertEquals(route, result)
     }
 
-    @Test // todo needs more testing
-    fun getUpdatePrimaryRouteIndexStateSetsPrimaryRoute() = coroutineRule.runBlockingTest {
-        val route1 = getRoute()
-        val route2 = getRoute()
-        val options = MapboxRouteLineOptions.Builder(ctx).build()
-        val api = MapboxRouteLineApi(options).also {
-            it.setRoutes(listOf(RouteLine(route1, null), RouteLine(route2, null)))
-        }
-
-        api.updateToPrimaryRoute(route2)
-
-        assertEquals(route2, api.getPrimaryRoute())
-    }
-
-    @Test
-    fun updateToPrimaryRoute_NoDuplicates() = coroutineRule.runBlockingTest {
-        val route1 = getRoute()
-        val route2 = getMultilegRoute()
-        val options = MapboxRouteLineOptions.Builder(ctx).build()
-        val api = MapboxRouteLineApi(options).also {
-            it.setRoutes(listOf(RouteLine(route1, null), RouteLine(route2, null)))
-        }
-        api.updateToPrimaryRoute(route2)
-
-        val updatedRoutes = api.getRoutes()
-
-        assertEquals(2, updatedRoutes.size)
-        assertEquals(route2, updatedRoutes[0])
-    }
-
-    @Test
-    fun updateToPrimaryRouteWithCallback() = coroutineRule.runBlockingTest {
-        val route1 = getRoute()
-        val route2 = getRoute()
-        val options = MapboxRouteLineOptions.Builder(ctx).build()
-        var consumerCalled = false
-        val api = MapboxRouteLineApi(options).also {
-            it.setRoutes(listOf(RouteLine(route1, null), RouteLine(route2, null)))
-        }
-        val consumer = MapboxNavigationConsumer<Expected<RouteLineError, RouteSetValue>> {
-            consumerCalled = true
-            assertEquals(route2, api.getPrimaryRoute())
-        }
-
-        api.updateToPrimaryRoute(route2, consumer)
-
-        assertTrue(consumerCalled)
-    }
-
     @Test
     fun getVanishPointOffset() {
         val options = MapboxRouteLineOptions.Builder(ctx)
@@ -177,6 +133,24 @@ class MapboxRouteLineApiTest {
     }
 
     @Test
+    fun setRoutes_whenRouteCoordinatesAreEmpty() = coroutineRule.runBlockingTest {
+        val options = MapboxRouteLineOptions.Builder(ctx).build()
+        val api = MapboxRouteLineApi(options)
+        val route = getRoute()
+        val augmentedLineString =
+            LineString.fromJson("{\"type\":\"LineString\",\"coordinates\":[]}")
+                .toPolyline(Constants.PRECISION_6)
+        val augmentedRouteJson = route.toJson()
+            .replace("etylgAl`guhFpJrBh@kHbC{[nAZ", augmentedLineString)
+        val augmentedRoute = DirectionsRoute.fromJson(augmentedRouteJson)
+
+        val result = api.setRoutes(listOf(RouteLine(augmentedRoute, null)))
+
+        assertNotNull(result.error)
+        assertNull(result.value)
+    }
+
+    @Test
     fun setRoutes_clearsVanishingRouteLine() = coroutineRule.runBlockingTest {
         val vanishingRouteLine = mockk<VanishingRouteLine>(relaxed = true)
         val realOptions = MapboxRouteLineOptions.Builder(ctx).build()
@@ -184,6 +158,10 @@ class MapboxRouteLineApiTest {
         every { options.routeLayerProvider } returns realOptions.routeLayerProvider
         every { options.resourceProvider } returns realOptions.resourceProvider
         every { options.vanishingRouteLine } returns vanishingRouteLine
+        every { options.displayRestrictedRoadSections } returns false
+        every {
+            options.styleInactiveRouteLegsIndependently
+        } returns realOptions.styleInactiveRouteLegsIndependently
 
         val api = MapboxRouteLineApi(options)
         val route = getRoute()
@@ -203,6 +181,10 @@ class MapboxRouteLineApiTest {
             every { options.routeLayerProvider } returns realOptions.routeLayerProvider
             every { options.resourceProvider } returns realOptions.resourceProvider
             every { options.vanishingRouteLine } returns vanishingRouteLine
+            every { options.displayRestrictedRoadSections } returns false
+            every {
+                options.styleInactiveRouteLegsIndependently
+            } returns realOptions.styleInactiveRouteLegsIndependently
 
             val api = MapboxRouteLineApi(options)
             val route = getRoute()
@@ -223,6 +205,10 @@ class MapboxRouteLineApiTest {
             every { options.routeLayerProvider } returns realOptions.routeLayerProvider
             every { options.resourceProvider } returns realOptions.resourceProvider
             every { options.vanishingRouteLine } returns vanishingRouteLine
+            every { options.displayRestrictedRoadSections } returns false
+            every {
+                options.styleInactiveRouteLegsIndependently
+            } returns realOptions.styleInactiveRouteLegsIndependently
 
             val api = MapboxRouteLineApi(options)
             val route = getRoute()
@@ -302,7 +288,7 @@ class MapboxRouteLineApiTest {
         assertEquals(expectedRouteLineExpression, result.value!!.routeLineExpression.toString())
         assertEquals(
             expectedTrafficLineExpression,
-            result.value!!.trafficLineExpression.toString()
+            result.value!!.trafficLineExpressionProvider!!.invoke().toString()
         )
         assertEquals(
             expectedPrimaryRouteSourceGeometry,
@@ -333,12 +319,8 @@ class MapboxRouteLineApiTest {
         val result = api.setRoutes(routes)
 
         assertNotEquals(
-            result.value!!.alternativeRoute1Source,
-            result.value!!.alternativeRoute2Source
-        )
-        assertNotEquals(
-            result.value!!.altRoute1TrafficExpression,
-            result.value!!.altRoute2TrafficExpression
+            result.value!!.altRoute1TrafficExpressionProvider,
+            result.value!!.altRoute2TrafficExpressionProvider
         )
     }
 
@@ -366,9 +348,9 @@ class MapboxRouteLineApiTest {
             "Point{type=Point, bbox=null, coordinates=[-122.523131, 37.975067]}"
         val route = getRoute()
         val routes = listOf(RouteLine(route, null))
-        val consumer = MapboxNavigationConsumer<Expected<RouteLineError, RouteSetValue>> { t ->
+        val consumer = MapboxNavigationConsumer<Expected<RouteLineError, RouteSetValue>> { result ->
             callbackCalled = true
-            val result = t
+
             assertEquals(expectedCasingExpression, result.value!!.casingLineExpression.toString())
             assertEquals(
                 expectedRouteLineExpression,
@@ -376,7 +358,7 @@ class MapboxRouteLineApiTest {
             )
             assertEquals(
                 expectedTrafficLineExpression,
-                result.value!!.trafficLineExpression.toString()
+                result.value!!.trafficLineExpressionProvider!!.invoke().toString()
             )
             assertEquals(
                 expectedPrimaryRouteSourceGeometry,
@@ -432,15 +414,15 @@ class MapboxRouteLineApiTest {
 
         assertEquals(
             expectedPrimaryTrafficLineExpression,
-            result.value!!.trafficLineExpression.toString()
+            result.value!!.trafficLineExpressionProvider!!.invoke().toString()
         )
         assertEquals(
             expectedAlternative1TrafficLineExpression,
-            result.value!!.altRoute1TrafficExpression.toString()
+            result.value!!.altRoute1TrafficExpressionProvider!!.invoke().toString()
         )
         assertEquals(
             expectedAlternative2TrafficLineExpression,
-            result.value!!.altRoute2TrafficExpression.toString()
+            result.value!!.altRoute2TrafficExpressionProvider!!.invoke().toString()
         )
     }
 
@@ -489,6 +471,10 @@ class MapboxRouteLineApiTest {
             every { options.routeLayerProvider } returns realOptions.routeLayerProvider
             every { options.resourceProvider } returns realOptions.resourceProvider
             every { options.vanishingRouteLine } returns vanishingRouteLine
+            every { options.displayRestrictedRoadSections } returns false
+            every {
+                options.styleInactiveRouteLegsIndependently
+            } returns realOptions.styleInactiveRouteLegsIndependently
 
             val api = MapboxRouteLineApi(options)
             val route = getRoute()
@@ -510,6 +496,10 @@ class MapboxRouteLineApiTest {
             every { options.routeLayerProvider } returns realOptions.routeLayerProvider
             every { options.resourceProvider } returns realOptions.resourceProvider
             every { options.vanishingRouteLine } returns vanishingRouteLine
+            every { options.displayRestrictedRoadSections } returns false
+            every {
+                options.styleInactiveRouteLegsIndependently
+            } returns realOptions.styleInactiveRouteLegsIndependently
 
             val api = MapboxRouteLineApi(options)
             val route = getRoute()
@@ -549,7 +539,10 @@ class MapboxRouteLineApiTest {
 
         assertEquals(expectedCasingExpression, result.value!!.casingLineExpression.toString())
         assertEquals(expectedRouteLineExpression, result.value!!.routeLineExpression.toString())
-        assertEquals(expectedTrafficLineExpression, result.value!!.trafficLineExpression.toString())
+        assertEquals(
+            expectedTrafficLineExpression,
+            result.value!!.trafficLineExpressionProvider!!.invoke().toString()
+        )
         assertEquals(
             expectedPrimaryRouteSourceGeometry,
             result.value!!.primaryRouteSource.features()!![0].geometry().toString()
@@ -572,16 +565,13 @@ class MapboxRouteLineApiTest {
             .withVanishingRouteLineEnabled(true)
             .build()
         val api = MapboxRouteLineApi(options)
-        val expectedCasingExpression =
-            "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.3240769449298392, " +
-                "[rgba, 47.0, 122.0, 198.0, 1.0]]"
-        val expectedRouteExpression =
-            "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.3240769449298392," +
-                " [rgba, 86.0, 168.0, 251.0, 1.0]]"
-        val expectedTrafficExpression =
-            "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.3240769449298392, " +
-                "[rgba, 86.0, 168.0, 251.0, 1.0], 0.9429639111009005, " +
-                "[rgba, 255.0, 149.0, 0.0, 1.0]]"
+        val expectedCasingExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], " +
+            "0.3240769449298392, [rgba, 47.0, 122.0, 198.0, 1.0]]"
+        val expectedRouteExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], " +
+            "0.3240769449298392, [rgba, 86.0, 168.0, 251.0, 1.0]]"
+        val expectedTrafficExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], " +
+            "0.3240769449298392, [rgba, 86.0, 168.0, 251.0, 1.0], 0.9429639111009005, " +
+            "[rgba, 255.0, 149.0, 0.0, 1.0]]"
         val route = getRoute()
         val lineString = LineString.fromPolyline(route.geometry() ?: "", Constants.PRECISION_6)
         val routeProgress = mockk<RouteProgress> {
@@ -624,6 +614,10 @@ class MapboxRouteLineApiTest {
         val options = mockk<MapboxRouteLineOptions> {
             every { vanishingRouteLine } returns mockVanishingRouteLine
             every { resourceProvider } returns realOptions.resourceProvider
+            every { displayRestrictedRoadSections } returns false
+            every {
+                styleInactiveRouteLegsIndependently
+            } returns realOptions.styleInactiveRouteLegsIndependently
         }
         val api = MapboxRouteLineApi(options)
         val routeProgress = mockk<RouteProgress> {
@@ -663,6 +657,10 @@ class MapboxRouteLineApiTest {
             val options = mockk<MapboxRouteLineOptions> {
                 every { vanishingRouteLine } returns mockVanishingRouteLine
                 every { resourceProvider } returns realOptions.resourceProvider
+                every { displayRestrictedRoadSections } returns false
+                every {
+                    styleInactiveRouteLegsIndependently
+                } returns realOptions.styleInactiveRouteLegsIndependently
             }
             val api = MapboxRouteLineApi(options)
             val routeProgress = mockk<RouteProgress> {
@@ -702,6 +700,10 @@ class MapboxRouteLineApiTest {
             val options = mockk<MapboxRouteLineOptions> {
                 every { vanishingRouteLine } returns mockVanishingRouteLine
                 every { resourceProvider } returns realOptions.resourceProvider
+                every { displayRestrictedRoadSections } returns false
+                every {
+                    styleInactiveRouteLegsIndependently
+                } returns realOptions.styleInactiveRouteLegsIndependently
             }
             val api = MapboxRouteLineApi(options)
             val routeProgress = mockk<RouteProgress> {
@@ -731,6 +733,10 @@ class MapboxRouteLineApiTest {
             val options = mockk<MapboxRouteLineOptions> {
                 every { vanishingRouteLine } returns mockVanishingRouteLine
                 every { resourceProvider } returns realOptions.resourceProvider
+                every { displayRestrictedRoadSections } returns false
+                every {
+                    styleInactiveRouteLegsIndependently
+                } returns realOptions.styleInactiveRouteLegsIndependently
             }
             val api = MapboxRouteLineApi(options)
             val routeProgress = mockk<RouteProgress> {
@@ -756,6 +762,10 @@ class MapboxRouteLineApiTest {
         val options = mockk<MapboxRouteLineOptions> {
             every { vanishingRouteLine } returns mockVanishingRouteLine
             every { resourceProvider } returns realOptions.resourceProvider
+            every { displayRestrictedRoadSections } returns false
+            every {
+                styleInactiveRouteLegsIndependently
+            } returns realOptions.styleInactiveRouteLegsIndependently
         }
         val api = MapboxRouteLineApi(options)
         val routeProgress = mockk<RouteProgress> {
@@ -778,12 +788,228 @@ class MapboxRouteLineApiTest {
         api.updateVanishingPointState(RouteProgressState.TRACKING)
         api.setRoutes(listOf(RouteLine(route, null)))
 
-        api.updateWithRouteProgress(routeProgress)
+        api.updateWithRouteProgress(routeProgress) {}
 
         verify { mockVanishingRouteLine.primaryRouteRemainingDistancesIndex = null }
         verify {
             mockVanishingRouteLine.updateVanishingPointState(RouteProgressState.TRACKING)
         }
+    }
+
+    @Test
+    fun updateWithRouteProgress_whenDeEmphasizeInactiveLegSegments() =
+        coroutineRule.runBlockingTest {
+            val expectedTrafficExp = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0," +
+                " [rgba, 86.0, 168.0, 251.0, 1.0], 0.10338667841237215, " +
+                "[rgba, 255.0, 149.0, 0.0, 1.0], 0.1235746096999951, " +
+                "[rgba, 86.0, 168.0, 251.0, 1.0], 0.27090572440007177, " +
+                "[rgba, 255.0, 149.0, 0.0, 1.0], 0.32147751186805656, " +
+                "[rgba, 86.0, 168.0, 251.0, 1.0], 0.48807892461540975, [rgba, 0.0, 0.0, 0.0, 0.0]]"
+            val realOptions = MapboxRouteLineOptions.Builder(ctx)
+                .styleInactiveRouteLegsIndependently(true)
+                .build()
+            val route = getMultilegWithTwoLegs()
+            val mockVanishingRouteLine = mockk<VanishingRouteLine>(relaxUnitFun = true) {
+                every { primaryRoutePoints } returns null
+                every { vanishPointOffset } returns 0.0
+                every { primaryRouteLineGranularDistances } returns null
+            }
+            val options = mockk<MapboxRouteLineOptions> {
+                every { vanishingRouteLine } returns mockVanishingRouteLine
+                every { resourceProvider } returns realOptions.resourceProvider
+                every {
+                    styleInactiveRouteLegsIndependently
+                } returns realOptions.styleInactiveRouteLegsIndependently
+                every { displayRestrictedRoadSections } returns false
+            }
+            val api = MapboxRouteLineApi(options)
+            val routeProgress = mockk<RouteProgress> {
+                every { currentLegProgress } returns mockk {
+                    every { legIndex } returns 0
+                    every { currentStepProgress } returns mockk {
+                        every { stepPoints } returns PolylineUtils.decode(
+                            route.legs()!![0].steps()!![0].geometry()!!,
+                            6
+                        )
+                        every { distanceTraveled } returns 0f
+                        every { step } returns mockk {
+                            every { distance() } returns route.legs()!![0].steps()!![0].distance()
+                        }
+                        every { stepIndex } returns 0
+                    }
+                }
+                every { currentState } returns RouteProgressState.TRACKING
+            }
+            api.updateVanishingPointState(RouteProgressState.TRACKING)
+            api.setRoutes(listOf(RouteLine(route, null)))
+            api.updateWithRouteProgress(routeProgress) {}
+
+            val result = api.setVanishingOffset(0.0).value!!
+
+            assertEquals(expectedTrafficExp, result.trafficLineExpression.toString())
+        }
+
+    @Test
+    fun updateWithRouteProgress_whenDeEmphasizeInactiveLegSegments_vanishingRouteLineDisabled() =
+        coroutineRule.runBlockingTest {
+            val expectedTrafficExp = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0, " +
+                "[rgba, 0.0, 0.0, 0.0, 0.0]]"
+            val realOptions = MapboxRouteLineOptions.Builder(ctx)
+                .styleInactiveRouteLegsIndependently(true)
+                .build()
+            val route = getMultilegWithTwoLegs()
+            val options = mockk<MapboxRouteLineOptions> {
+                every { vanishingRouteLine } returns null
+                every { resourceProvider } returns realOptions.resourceProvider
+                every {
+                    styleInactiveRouteLegsIndependently
+                } returns realOptions.styleInactiveRouteLegsIndependently
+                every { displayRestrictedRoadSections } returns false
+            }
+            val api = MapboxRouteLineApi(options)
+            val routeProgress = mockk<RouteProgress> {
+                every { currentLegProgress } returns mockk {
+                    every { legIndex } returns 0
+                    every { currentStepProgress } returns mockk {
+                        every { stepPoints } returns PolylineUtils.decode(
+                            route.legs()!![0].steps()!![0].geometry()!!,
+                            6
+                        )
+                        every { distanceTraveled } returns 0f
+                        every { step } returns mockk {
+                            every { distance() } returns route.legs()!![0].steps()!![0].distance()
+                        }
+                        every { stepIndex } returns 0
+                    }
+                }
+                every { currentState } returns RouteProgressState.TRACKING
+            }
+            api.updateVanishingPointState(RouteProgressState.TRACKING)
+            api.setRoutes(listOf(RouteLine(route, null)))
+            api.updateWithRouteProgress(routeProgress) {}
+
+            val result = api.setVanishingOffset(0.0).value!!
+
+            assertEquals(expectedTrafficExp, result.trafficLineExpression.toString())
+            assertEquals(-1, api.activeLegIndex)
+        }
+
+    @Test
+    fun updateWithRouteProgress_whenDeEmphasizeInactiveLegSegments_setsActiveLegIndex() =
+        coroutineRule.runBlockingTest {
+            val realOptions = MapboxRouteLineOptions.Builder(ctx)
+                .styleInactiveRouteLegsIndependently(true)
+                .build()
+            val route = getMultilegWithTwoLegs()
+            val mockVanishingRouteLine = mockk<VanishingRouteLine>(relaxUnitFun = true) {
+                every { primaryRoutePoints } returns null
+                every { vanishPointOffset } returns 0.0
+                every { primaryRouteLineGranularDistances } returns null
+            }
+            val options = mockk<MapboxRouteLineOptions> {
+                every { vanishingRouteLine } returns mockVanishingRouteLine
+                every { resourceProvider } returns realOptions.resourceProvider
+                every {
+                    styleInactiveRouteLegsIndependently
+                } returns realOptions.styleInactiveRouteLegsIndependently
+                every { displayRestrictedRoadSections } returns false
+            }
+            val api = MapboxRouteLineApi(options)
+            val routeProgress = mockk<RouteProgress> {
+                every { currentLegProgress } returns mockk {
+                    every { legIndex } returns 0
+                    every { currentStepProgress } returns mockk {
+                        every { stepPoints } returns PolylineUtils.decode(
+                            route.legs()!![0].steps()!![0].geometry()!!,
+                            6
+                        )
+                        every { distanceTraveled } returns 0f
+                        every { step } returns mockk {
+                            every { distance() } returns route.legs()!![0].steps()!![0].distance()
+                        }
+                        every { stepIndex } returns 0
+                    }
+                }
+                every { currentState } returns RouteProgressState.TRACKING
+            }
+            api.updateVanishingPointState(RouteProgressState.TRACKING)
+            api.setRoutes(listOf(RouteLine(route, null)))
+
+            api.updateWithRouteProgress(routeProgress) {}
+
+            assertEquals(0, api.activeLegIndex)
+        }
+
+    @Test
+    fun highlightActiveLeg() = coroutineRule.runBlockingTest {
+        var callbackCalled = false
+        val expectedTrafficExp = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0, " +
+            "[rgba, 0.0, 0.0, 0.0, 0.0], 0.48807892461540975, [rgba, 143.0, 36.0, 71.0, 1.0]," +
+            " 0.48811448630642584, [rgba, 255.0, 149.0, 0.0, 1.0], 0.5403176217572488, " +
+            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.5691720892036999, [rgba, 255.0, 149.0, 0.0, 1.0]," +
+            " 0.589665898238105, [rgba, 86.0, 168.0, 251.0, 1.0], 0.883716372144694, " +
+            "[rgba, 255.0, 149.0, 0.0, 1.0], 0.939080244312266, [rgba, 86.0, 168.0, 251.0, 1.0]]"
+        val expectedRouteLineExp = "[step, [line-progress], [rgba, 86.0, 168.0, 251.0, 1.0], 0.0," +
+            " [rgba, 0.0, 0.0, 0.0, 0.0], 0.48807892461540975, [rgba, 86.0, 168.0, 251.0, 1.0]]"
+        val expectedCasingExp = "[step, [line-progress], [rgba, 47.0, 122.0, 198.0, 1.0], 0.0," +
+            " [rgba, 0.0, 0.0, 0.0, 0.0], 0.48807892461540975, [rgba, 47.0, 122.0, 198.0, 1.0]]"
+        val route = getMultilegWithTwoLegs()
+        val options = MapboxRouteLineOptions.Builder(ctx)
+            .styleInactiveRouteLegsIndependently(true)
+            .build()
+        val api = MapboxRouteLineApi(options)
+        val routeProgress = mockk<RouteProgress> {
+            every { currentLegProgress } returns mockk {
+                every { legIndex } returns 1
+                every { currentStepProgress } returns mockk {
+                    every { stepPoints } returns PolylineUtils.decode(
+                        route.legs()!![0].steps()!![0].geometry()!!,
+                        6
+                    )
+                    every { distanceTraveled } returns 0f
+                    every { step } returns mockk {
+                        every { distance() } returns route.legs()!![0].steps()!![0].distance()
+                    }
+                    every { stepIndex } returns 0
+                }
+                every { currentState } returns RouteProgressState.UNCERTAIN
+            }
+        }
+        api.setRoutes(listOf(RouteLine(route, null)))
+
+        api.updateWithRouteProgress(routeProgress) { result ->
+            assertEquals(expectedTrafficExp, result.value!!.trafficLineExpression.toString())
+            assertEquals(expectedRouteLineExp, result.value!!.routeLineExpression.toString())
+            assertEquals(expectedCasingExp, result.value!!.casingLineExpression.toString())
+            callbackCalled = true
+        }
+        assertTrue(callbackCalled)
+    }
+
+    @Test
+    fun showRouteWithLegIndexHighlighted() = coroutineRule.runBlockingTest {
+        val expectedTrafficExp = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0, " +
+            "[rgba, 0.0, 0.0, 0.0, 0.0], 0.48807892461540975, [rgba, 143.0, 36.0, 71.0, 1.0]," +
+            " 0.48811448630642584, [rgba, 255.0, 149.0, 0.0, 1.0], 0.5403176217572488, " +
+            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.5691720892036999, [rgba, 255.0, 149.0, 0.0, 1.0]," +
+            " 0.589665898238105, [rgba, 86.0, 168.0, 251.0, 1.0], 0.883716372144694, " +
+            "[rgba, 255.0, 149.0, 0.0, 1.0], 0.939080244312266, [rgba, 86.0, 168.0, 251.0, 1.0]]"
+        val expectedRouteLineExp = "[step, [line-progress], [rgba, 86.0, 168.0, 251.0, 1.0], 0.0," +
+            " [rgba, 0.0, 0.0, 0.0, 0.0], 0.48807892461540975, [rgba, 86.0, 168.0, 251.0, 1.0]]"
+        val expectedCasingExp = "[step, [line-progress], [rgba, 47.0, 122.0, 198.0, 1.0], 0.0," +
+            " [rgba, 0.0, 0.0, 0.0, 0.0], 0.48807892461540975, [rgba, 47.0, 122.0, 198.0, 1.0]]"
+        val route = getMultilegWithTwoLegs()
+        val options = MapboxRouteLineOptions.Builder(ctx)
+            .styleInactiveRouteLegsIndependently(true)
+            .build()
+        val api = MapboxRouteLineApi(options)
+        api.setRoutes(listOf(RouteLine(route, null)))
+
+        val result = api.showRouteWithLegIndexHighlighted(1).value!!
+
+        assertEquals(expectedTrafficExp, result.trafficLineExpression.toString())
+        assertEquals(expectedRouteLineExp, result.routeLineExpression.toString())
+        assertEquals(expectedCasingExp, result.casingLineExpression.toString())
     }
 
     @Test
@@ -1021,16 +1247,47 @@ class MapboxRouteLineApiTest {
 
         val longRouteDef = async {
             val result = api.setRoutes(longRoute)
-            (result.value!!.trafficLineExpression.contents as ArrayList<*>).size
+            (result.value!!.trafficLineExpressionProvider!!.invoke().contents as ArrayList<*>).size
         }
         delay(40)
         val shortRouteDef = async {
             val result = api.setRoutes(shortRoute)
-            (result.value!!.trafficLineExpression.contents as ArrayList<*>).size
+            (
+                result.value!!.trafficLineExpressionProvider!!.invoke().contents as ArrayList<*>
+                ).size
         }
 
         assertEquals(7, shortRouteDef.await())
         assertEquals(625, longRouteDef.await())
+    }
+
+    @Test
+    fun alternativelyStyleSegmentsNotInLeg() = coroutineRule.runBlockingTest {
+        val colorOptions = RouteLineColorResources.Builder()
+            .inActiveRouteLegsColor(Color.YELLOW)
+            .build()
+        val resources = RouteLineResources.Builder().routeLineColorResources(colorOptions).build()
+        val options = MapboxRouteLineOptions.Builder(ctx).withRouteLineResources(resources).build()
+        val route = getMultilegWithTwoLegs()
+        val segments = MapboxRouteLineUtils.calculateRouteLineSegments(
+            route,
+            listOf(),
+            true,
+            options.resourceProvider.routeLineColorResources,
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
+        )
+        val api = MapboxRouteLineApi(options)
+
+        val result = api.alternativelyStyleSegmentsNotInLeg(1, segments)
+
+        assertEquals(12, result.size)
+        assertEquals(-256, result.first().segmentColor)
+        assertEquals(0, result.first().legIndex)
+        assertEquals(-256, result[4].segmentColor)
+        assertEquals(0, result[4].legIndex)
+        assertEquals(-7396281, result[5].segmentColor)
+        assertEquals(1, result[5].legIndex)
     }
 
     private fun getRoute(): DirectionsRoute {
@@ -1050,6 +1307,11 @@ class MapboxRouteLineApiTest {
 
     private fun getVeryLongRoute(): DirectionsRoute {
         val routeAsJson = loadJsonFixture("cross-country-route.json")
+        return DirectionsRoute.fromJson(routeAsJson)
+    }
+
+    private fun getMultilegWithTwoLegs(): DirectionsRoute {
+        val routeAsJson = loadJsonFixture("multileg-route-two-legs.json")
         return DirectionsRoute.fromJson(routeAsJson)
     }
 

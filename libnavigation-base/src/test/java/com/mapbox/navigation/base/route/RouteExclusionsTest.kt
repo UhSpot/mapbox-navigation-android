@@ -18,8 +18,7 @@ class RouteExclusionsTest {
         val destination = Point.fromLngLat(12.54071010365584, 55.68521471271404)
         val routeOptionsBuilder = RouteOptions.builder()
             .applyDefaultNavigationOptions()
-            .coordinates(listOf(origin, destination))
-            .accessToken("pk.123")
+            .coordinatesList(listOf(origin, destination))
 
         val routeOptionsWithExclusions = routeOptionsBuilder.exclude(
             DirectionsCriteria.EXCLUDE_TOLL,
@@ -35,8 +34,7 @@ class RouteExclusionsTest {
         val destination = Point.fromLngLat(12.54071010365584, 55.68521471271404)
         val routeOptionsWithoutExclusions = RouteOptions.builder()
             .applyDefaultNavigationOptions()
-            .coordinates(listOf(origin, destination))
-            .accessToken("pk.123")
+            .coordinatesList(listOf(origin, destination))
             .build()
         val directionsRoute = DirectionsRoute.builder()
             .routeOptions(routeOptionsWithoutExclusions)

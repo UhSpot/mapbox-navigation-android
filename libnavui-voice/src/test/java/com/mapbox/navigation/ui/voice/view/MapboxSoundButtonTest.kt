@@ -6,12 +6,8 @@ import android.view.View
 import android.widget.ImageView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.test.core.app.ApplicationProvider
-import com.mapbox.navigation.ui.base.util.MapboxNavigationConsumer
 import com.mapbox.navigation.ui.voice.R
-import io.mockk.Ordering
-import io.mockk.mockk
-import io.mockk.slot
-import io.mockk.verify
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -24,13 +20,14 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowLooper
 
+private const val customText = "custom text"
+
 @LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.P])
 class MapboxSoundButtonTest {
 
     private lateinit var ctx: Context
-    private val consumer: MapboxNavigationConsumer<Boolean> = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -50,7 +47,7 @@ class MapboxSoundButtonTest {
         val view = MapboxSoundButton(ctx, null)
         val expectedDrawable = view.findViewById<ImageView>(R.id.soundButtonIcon)
 
-        view.unmute(null)
+        view.unmute()
 
         assertNotNull(expectedDrawable.drawable)
     }
@@ -60,7 +57,7 @@ class MapboxSoundButtonTest {
         val view = MapboxSoundButton(ctx, null, 0)
         val expectedDrawable = view.findViewById<ImageView>(R.id.soundButtonIcon)
 
-        view.mute(null)
+        view.mute()
 
         assertNotNull(expectedDrawable.drawable)
     }
@@ -76,99 +73,79 @@ class MapboxSoundButtonTest {
     }
 
     @Test
-    fun `mute callback not invoked`() {
+    fun `mute returns true`() {
         val view = MapboxSoundButton(ctx, null, 0)
-        val messageSlot = slot<Boolean>()
 
-        view.mute(null)
-
-        verify(exactly = 0) { consumer.accept(capture(messageSlot)) }
+        assertTrue(view.mute())
     }
 
     @Test
-    fun `mute callback invoked`() {
+    fun `unmute returns false`() {
         val view = MapboxSoundButton(ctx, null, 0)
-        val messageSlot = slot<Boolean>()
 
-        view.mute(consumer)
-
-        verify(exactly = 1) { consumer.accept(capture(messageSlot)) }
-        assertTrue(messageSlot.captured)
-    }
-
-    @Test
-    fun `unmute callback not invoked`() {
-        val view = MapboxSoundButton(ctx, null, 0)
-        val messageSlot = slot<Boolean>()
-
-        view.unmute(null)
-
-        verify(exactly = 0) { consumer.accept(capture(messageSlot)) }
-    }
-
-    @Test
-    fun `unmute callback invoked`() {
-        val view = MapboxSoundButton(ctx, null, 0)
-        val messageSlot = slot<Boolean>()
-
-        view.unmute(consumer)
-
-        verify(exactly = 1) { consumer.accept(capture(messageSlot)) }
-        assertFalse(messageSlot.captured)
+        assertFalse(view.unmute())
     }
 
     @Test
     fun `mute and extend`() {
         val view = MapboxSoundButton(ctx)
         val soundButtonText = view.findViewById<AppCompatTextView>(R.id.soundButtonText)
-        val messageSlot = slot<Boolean>()
 
-        view.muteAndExtend(0, consumer)
+        assertTrue(view.muteAndExtend(0))
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
 
-        verify(exactly = 1) { consumer.accept(capture(messageSlot)) }
-        assertTrue(messageSlot.captured)
-        assertTrue(soundButtonText.visibility == View.INVISIBLE)
+        assertTrue(soundButtonText.text.isEmpty())
+        assertEquals(soundButtonText.visibility, View.INVISIBLE)
+    }
+
+    @Test
+    fun `mute and extend with text`() {
+        val view = MapboxSoundButton(ctx)
+        val soundButtonText = view.findViewById<AppCompatTextView>(R.id.soundButtonText)
+
+        view.muteAndExtend(0, customText)
+
+        assertEquals(soundButtonText.text, customText)
+        assertEquals(soundButtonText.visibility, View.VISIBLE)
     }
 
     @Test
     fun `mute and unmute and extend multiple times is allowed`() {
         val view = MapboxSoundButton(ctx)
         val soundButtonText = view.findViewById<AppCompatTextView>(R.id.soundButtonText)
-        val messageSlot = slot<Boolean>()
 
-        view.muteAndExtend(100, consumer)
-        view.muteAndExtend(100, consumer)
-        view.unmuteAndExtend(100, consumer)
-        view.muteAndExtend(100, consumer)
-        view.unmuteAndExtend(100, consumer)
-        view.unmuteAndExtend(100, consumer)
+        assertTrue(view.muteAndExtend(100))
+        assertTrue(view.muteAndExtend(100))
+        assertFalse(view.unmuteAndExtend(100))
+        assertTrue(view.muteAndExtend(100))
+        assertFalse(view.unmuteAndExtend(100))
+        assertFalse(view.unmuteAndExtend(100))
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
 
-        verify(exactly = 6) { consumer.accept(capture(messageSlot)) }
-        verify(ordering = Ordering.SEQUENCE) {
-            consumer.accept(true)
-            consumer.accept(true)
-            consumer.accept(false)
-            consumer.accept(true)
-            consumer.accept(false)
-            consumer.accept(false)
-        }
-        assertTrue(soundButtonText.visibility == View.INVISIBLE)
-        assertTrue(soundButtonText.visibility == View.INVISIBLE)
+        assertTrue(soundButtonText.text.isEmpty())
+        assertEquals(soundButtonText.visibility, View.INVISIBLE)
     }
 
     @Test
     fun `unmute and extend`() {
         val view = MapboxSoundButton(ctx)
         val soundButtonText = view.findViewById<AppCompatTextView>(R.id.soundButtonText)
-        val messageSlot = slot<Boolean>()
 
-        view.unmuteAndExtend(0, consumer)
+        assertFalse(view.unmuteAndExtend(0))
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
 
-        verify(exactly = 1) { consumer.accept(capture(messageSlot)) }
-        assertFalse(messageSlot.captured)
-        assertTrue(soundButtonText.visibility == View.INVISIBLE)
+        assertTrue(soundButtonText.text.isEmpty())
+        assertEquals(soundButtonText.visibility, View.INVISIBLE)
+    }
+
+    @Test
+    fun `unmute and extend with text`() {
+        val view = MapboxSoundButton(ctx)
+        val soundButtonText = view.findViewById<AppCompatTextView>(R.id.soundButtonText)
+
+        view.unmuteAndExtend(0, customText)
+
+        assertEquals(soundButtonText.text, customText)
+        assertEquals(soundButtonText.visibility, View.VISIBLE)
     }
 }

@@ -8,14 +8,12 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
-import androidx.annotation.StringRes
 import androidx.annotation.StyleRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
-import com.mapbox.navigation.ui.base.util.MapboxNavigationConsumer
 import com.mapbox.navigation.ui.utils.internal.extensions.afterMeasured
-import com.mapbox.navigation.ui.utils.internal.extensions.extend
-import com.mapbox.navigation.ui.utils.internal.extensions.shrink
+import com.mapbox.navigation.ui.utils.internal.extensions.measureTextWidth
+import com.mapbox.navigation.ui.utils.internal.extensions.play
 import com.mapbox.navigation.ui.utils.internal.extensions.slideWidth
 import com.mapbox.navigation.ui.voice.R
 import com.mapbox.navigation.ui.voice.databinding.MapboxSoundButtonLayoutBinding
@@ -25,7 +23,7 @@ import com.mapbox.navigation.ui.voice.databinding.MapboxSoundButtonLayoutBinding
  */
 class MapboxSoundButton : ConstraintLayout {
 
-    private var textWidth = 0
+    private var shrunkWidth = 0
     private var muteDrawable: Drawable? = null
     private var unmuteDrawable: Drawable? = null
     private val binding = MapboxSoundButtonLayoutBinding.inflate(
@@ -90,17 +88,26 @@ class MapboxSoundButton : ConstraintLayout {
                 R.drawable.mapbox_ic_sound_on
             )
         )
+
+        val background = typedArray.getDrawable(R.styleable.MapboxSoundButton_soundButtonBackground)
+        if (background != null) {
+            binding.soundButtonIcon.background = background
+            binding.soundButtonText.background = background
+        }
+
+        typedArray.getColorStateList(R.styleable.MapboxSoundButton_soundButtonTextColor)
+            ?.let { binding.soundButtonText.setTextColor(it) }
     }
 
     override fun onFinishInflate() {
         super.onFinishInflate()
         binding.soundButtonText.afterMeasured {
-            textWidth = width
+            shrunkWidth = width
         }
     }
 
     /**
-     * Allows you to change the style of [MapboxRouteOverviewButton].
+     * Allows you to change the style of [MapboxSoundButton].
      * @param style Int
      */
     fun updateStyle(@StyleRes style: Int) {
@@ -114,71 +121,61 @@ class MapboxSoundButton : ConstraintLayout {
 
     /**
      * Invoke the function to mute.
-     * @param callback MapboxNavigationConsumer<Boolean> invoked after the drawable has been set and
-     * returns true representing that view is in muted state.
+     * @return `true` representing that view is in muted state.
      */
-    @JvmOverloads
-    fun mute(callback: MapboxNavigationConsumer<Boolean>? = null) {
+    fun mute(): Boolean {
         binding.soundButtonIcon.setImageDrawable(muteDrawable)
-        callback?.accept(true)
+        return true
     }
 
     /**
      * Invoke the function to unmute.
-     * @param callback MapboxNavigationConsumer<Boolean> invoked after the drawable has been set and
-     * returns false representing that view is in unmuted state.
+     * @return `false` representing that view is in unmuted state.
      */
-    @JvmOverloads
-    fun unmute(callback: MapboxNavigationConsumer<Boolean>? = null) {
+    fun unmute(): Boolean {
         binding.soundButtonIcon.setImageDrawable(unmuteDrawable)
-        callback?.accept(false)
+        return false
     }
 
     /**
      * Invoke the function to mute and show optional text associated with the action.
      * @param duration for the view to be in the extended mode before it starts to shrink.
-     * @param callback MapboxNavigationConsumer<Boolean> invoked after the animation is finished and
-     * returns true representing that view is in muted state.
+     * @param text for the view to show in the extended mode.
+     * @return `true` representing that view is in muted state.
      */
     @JvmOverloads
-    fun muteAndExtend(duration: Long, callback: MapboxNavigationConsumer<Boolean>? = null) {
-        showTextWithAnimation(R.string.mapbox_muted, duration) {
-            mute(callback)
-        }
+    fun muteAndExtend(
+        duration: Long,
+        text: String = context.getString(R.string.mapbox_muted),
+    ): Boolean {
+        return mute().also { showTextWithAnimation(text, duration) }
     }
 
     /**
      * Invoke the function to unmute and show optional text associated with the action.
      * @param duration for the view to be in the extended mode before it starts to shrink.
-     * @param callback MapboxNavigationConsumer<Boolean> invoked after the animation is finished and
-     * returns false representing that view is in unmuted state.
+     * @param text for the view to show in the extended mode.
+     * @return `false` representing that view is in unmuted state.
      */
     @JvmOverloads
-    fun unmuteAndExtend(duration: Long, callback: MapboxNavigationConsumer<Boolean>? = null) {
-        showTextWithAnimation(R.string.mapbox_unmuted, duration) {
-            unmute(callback)
-        }
+    fun unmuteAndExtend(
+        duration: Long,
+        text: String = context.getString(R.string.mapbox_unmuted),
+    ): Boolean {
+        return unmute().also { showTextWithAnimation(text, duration) }
     }
 
-    private fun showTextWithAnimation(
-        @StringRes text: Int,
-        duration: Long,
-        beforeAnimation: () -> Unit
-    ) {
-        beforeAnimation()
-        val extendToWidth = EXTEND_TEXT_TO_WIDTH * context.resources.displayMetrics.density
-        val animator = getAnimator(textWidth, extendToWidth.toInt())
+    private fun showTextWithAnimation(text: String, duration: Long) {
+        val extendedWidth = (binding.soundButtonText.measureTextWidth(text) + shrunkWidth)
+            .coerceAtLeast(MIN_EXTENDED_WIDTH * context.resources.displayMetrics.density)
         mainHandler.removeCallbacksAndMessages(null)
-        binding.soundButtonText.extend(
-            animator,
+        getAnimator(shrunkWidth, extendedWidth.toInt()).play(
             doOnStart = {
-                binding.soundButtonText.text = context.getString(text)
+                binding.soundButtonText.text = text
                 binding.soundButtonText.visibility = View.VISIBLE
                 mainHandler.postDelayed(
                     {
-                        val endAnimator = getAnimator(extendToWidth.toInt(), textWidth)
-                        binding.soundButtonText.shrink(
-                            endAnimator,
+                        getAnimator(extendedWidth.toInt(), shrunkWidth).play(
                             doOnStart = {
                                 binding.soundButtonText.text = null
                             },
@@ -197,7 +194,7 @@ class MapboxSoundButton : ConstraintLayout {
         binding.soundButtonText.slideWidth(from, to, SLIDE_DURATION)
 
     private companion object {
-        const val SLIDE_DURATION = 300L
-        const val EXTEND_TEXT_TO_WIDTH = 165
+        private const val SLIDE_DURATION = 300L
+        private const val MIN_EXTENDED_WIDTH = 165
     }
 }

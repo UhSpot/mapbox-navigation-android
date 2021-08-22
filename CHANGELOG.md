@@ -2,6 +2,337 @@
 
 Mapbox welcomes participation and contributions from everyone.
 
+## Mapbox Navigation SDK 2.0.0-beta.23 - August 20, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Features
+- Added option to set custom text for `Recenter`, `Sound`, and `RouteOverview` buttons. [#4703](https://github.com/mapbox/mapbox-navigation-android/pull/4703)
+- Introduced `MapboxBuildingsApi` and `MapboxBuildingView` that would be responsible to query a building on a map given a point and render it using the view. [#4704](https://github.com/mapbox/mapbox-navigation-android/pull/4704)
+- Added optional `EventsAppMetadata` field to `NavigationOptions`. [#4712](https://github.com/mapbox/mapbox-navigation-android/pull/4712)
+- Exposed `NavigationSessionState` and `NavigationSessionStateObserver`. [#4712](https://github.com/mapbox/mapbox-navigation-android/pull/4712)
+- Exposed lane icon drawables with `MapboxLaneIconsApi`. [#4729](https://github.com/mapbox/mapbox-navigation-android/pull/4729)
+- Added `SubgraphLocation` for `RoadObject`.  [#4731](https://github.com/mapbox/mapbox-navigation-android/pull/4731)
+- Added `roadSurface` property to `EHorizonEdgeMetadata`. [#4733](https://github.com/mapbox/mapbox-navigation-android/pull/4733)
+
+#### Bug fixes and improvements
+- Fixed a bug when after a route is set `RouteAlternativesController` started to request alternative routes with no observers. [#4706](https://github.com/mapbox/mapbox-navigation-android/pull/4706)
+- Fixed an issue with an occasional `ArrayindexOutOfBoundsException` being thrown when setting a new route. [#4714](https://github.com/mapbox/mapbox-navigation-android/pull/4714)
+- Fixed a bug when NavSDK crashed on unknown `RoadObjectLocation`. [#4731](https://github.com/mapbox/mapbox-navigation-android/pull/4731)
+- Removed `MapboxBuildingHighlightApi` and `MapboxBuildingArrivalApi`. [#4704](https://github.com/mapbox/mapbox-navigation-android/pull/4704)
+- Removed `Snapshotter` feature and it's related public facing apis, views and examples. [#4711](https://github.com/mapbox/mapbox-navigation-android/pull/4711)
+- Removed `AppMetadata` from `MapboxNavigation.postUserFeedback`. [#4712](https://github.com/mapbox/mapbox-navigation-android/pull/4712)
+
+## Mapbox Navigation SDK 2.0.0-beta.22 - August 12, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Features
+- Added feedback event for incorrect speed limit [#4694](https://github.com/mapbox/mapbox-navigation-android/pull/4694)
+- Added option to set custom background and text color for `Recenter`, `Sound`, and `RouteOverview` buttons. [#4697](https://github.com/mapbox/mapbox-navigation-android/pull/4697)
+- Added `Gate` object that represents information about a particular exit or entrance. [#4692](https://github.com/mapbox/mapbox-navigation-android/pull/4692)
+
+#### Bug fixes and improvements
+- Refactored the `MapboxTripNotification` to use same set of turn icons as `ManeuverView` does. [#4683](https://github.com/mapbox/mapbox-navigation-android/pull/4683)
+- :warning: Removed paint code generated files. [#4683](https://github.com/mapbox/mapbox-navigation-android/pull/4683)
+- Changed the roundabout drawables for maneuvers and notifications. [#4700](https://github.com/mapbox/mapbox-navigation-android/pull/4700)
+- Changed `RoadObjectDistanceInfo.distanceToStart` to nullable. [#4692](https://github.com/mapbox/mapbox-navigation-android/pull/4692)
+- Updated `PolygonDistanceInfo` and `SubGraphDistanceInfo` to include `entrances` and `exits`. [#4692](https://github.com/mapbox/mapbox-navigation-android/pull/4692)
+ 
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.6` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.6))
+- Mapbox Navigation Native `v62.0.0`
+- Mapbox Core Common `v16.2.0`
+- Mapbox Java `v6.0.0-alpha.2` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v6.0.0-alpha.2))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.1.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.21 - July 28, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+- Added `BuildingHighlightObserver` for exposing map data used to highlight a building. Add example showing extrude all building along with a highlighted one. [#4420](https://github.com/mapbox/mapbox-navigation-android/pull/4420)
+- :warning: Removed `accessToken` from `RouteOptions`, the token provided via `NaivgationOptions` is now always used for route requests. This also simplifies serialization and deserialization of route objects. Refs [`mapbox-java` `v6.0.0-alpha2`](https://github.com/mapbox/mapbox-java/releases/tag/v6.0.0-alpha.2). [#4670](https://github.com/mapbox/mapbox-navigation-android/pull/4670)
+- Added geometry to `Maneuver` object. [#4653](https://github.com/mapbox/mapbox-navigation-android/pull/4653)
+  - Exposed `Factory` to allow developers to create `Maneuver` object.
+  - Added `Point` as another argument to `Maneuver`
+- Removed access token from `MapboxHistoryReader`. [#4667](https://github.com/mapbox/mapbox-navigation-android/pull/4667), [#4670](https://github.com/mapbox/mapbox-navigation-android/pull/4670)
+
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.4` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.4))
+- Mapbox Navigation Native `v59.0.0`
+- Mapbox Core Common `v16.1.0`
+- Mapbox Java `v6.0.0-alpha.2` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v6.0.0-alpha.2))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.1.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.20 - July 22, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Features
+- Added option to `MapboxRouteLineOptions` to visually differentiate inactive route legs for multi-leg routes. A callback was added to `MapboxRouteLineApi::updateWithRouteProgress`. The result of the callback should be rendered by the `MapboxRouteLineView` class. [#4489](https://github.com/mapbox/mapbox-navigation-android/pull/4489)
+
+#### Bug fixes and improvements
+- :warning: Removed `RouteRefreshOptions#enabled`. To enable the route refresh feature (that updates congestion and other annotations on the currently active route) you need to enable it via `RouteOptions#enableRefresh` when making a route request. [#4655](https://github.com/mapbox/mapbox-navigation-android/pull/4655)
+- Refactored `MapboxSpeechApi`s to make them non-cancelling. [#4646](https://github.com/mapbox/mapbox-navigation-android/pull/4646)
+- Fixed an issue where `Tunnel#length` information was missing for some of the tunnels. [#4656](https://github.com/mapbox/mapbox-navigation-android/pull/4656)
+- Use `HistoryReader` for navigation replay. :warning: `mapbox-java` `v6.0.0-alpha.1` brought new features but also some breaking changes to `DirectionsRoute` and `MapboxDirections` objects that impact replay. Read more about the changes in the [release notes](https://github.com/mapbox/mapbox-java/releases/tag/v6.0.0-alpha.1). [#4601](https://github.com/mapbox/mapbox-navigation-android/pull/4601)
+  - Delete `ReplayHistoryDTO` in favor of `MapboxHistoryReader`.
+  - Add `eventTimestamp` to all `HistoryEvent` classes.
+  - Delete `CustomEventMapper` in favor of `ReplayHistoryEventMapper`.
+  - Create new `ReplayHistoryMapper` which is extendable and customizable.
+- :warning: Upgraded `mapbox-java` to `v6.0.0-alpha.1` which brings new features but also some breaking changes to `DirectionsRoute` and `MapboxDirections` objects. Read more about the changes in the [release notes](https://github.com/mapbox/mapbox-java/releases/tag/v6.0.0-alpha.1). [#4526](https://github.com/mapbox/mapbox-navigation-android/pull/4526)
+- Added `RouterOrigin` which indicates where a route was fetched from. [#4639](https://github.com/mapbox/mapbox-navigation-android/pull/4639)
+  - Added `RouterOrigin` param to:
+    - `RouterCallback#onRoutesReady` method;
+    - `RouterCallback#onCanceled` method;
+    - `RouterFailure` class;
+    - `RerouteState.RouteFetched` class;
+    - `RouteAlternativesObserver#onRouteAlternatives` method.
+- Updated assets and resources translations. [#4647](https://github.com/mapbox/mapbox-navigation-android/pull/4647)
+- The initialization of the route line related layers is always a synchronous call. [#4631](https://github.com/mapbox/mapbox-navigation-android/pull/4631)
+- Bug fix for invalid `FeatureCollection` objects derived from routes that have less than two coordinates. [#4638](https://github.com/mapbox/mapbox-navigation-android/pull/4638)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.4` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.4))
+- Mapbox Navigation Native `v59.0.0`
+- Mapbox Core Common `v16.1.0`
+- Mapbox Java `v6.0.0-alpha.1` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v6.0.0-alpha.1))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.1.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.19 - July 15, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Features
+- Exposed `ManeuverOptions#filterDuplicateManeuvers` which allows to filter out `Maneuver`s that point to the same actual turn from the presented lists. This parameter defaults to `true`. [#4583](https://github.com/mapbox/mapbox-navigation-android/pull/4583)
+
+#### Bug fixes and improvements
+- Fixed an issue where the `MapboxNavigationViewportDataSource` could produce an unexpected update when the same route was provided more than once, for example, during a route refresh update. [#4586](https://github.com/mapbox/mapbox-navigation-android/pull/4586)
+- :warning: Changed `MapboxDistanceFormatter`'s package from `com.mapbox.navigation.core.internal.formatter` to `com.mapbox.navigation.core.formatter`, making it stable. [#4608](https://github.com/mapbox/mapbox-navigation-android/pull/4608)
+- :warning: Changed `MapboxManeuverApi#getManeuvers(route, callback, routeLeg)` to `MapboxManeuverApi#getManeuvers(route, callback, routeLegIndex)` to provide better support for various scenarios. This also fixed a bug where `MapboxManeuverApi` was not producing any more updates after the original route's annotations were refreshed. [#4607](https://github.com/mapbox/mapbox-navigation-android/pull/4607)
+- :warning: Removed `ManevuerCallback` since it was called back synchronously anyway. `MapboxManeuverApi#getManeuvers` returns the results directly now. [#4609](https://github.com/mapbox/mapbox-navigation-android/pull/4609)
+- Minor performance improvements in the drawing of the route line. Laying out traffic on top of the route is now decoupled from drawing the route itself, which decreases the time in which the core of the route line is first visible. [#4292](https://github.com/mapbox/mapbox-navigation-android/pull/4292)
+- Fixed a `ConcurrentModificationException` that could occasionally be thrown when `PredictiveCacheController` was used and the connectivity changed between online/offline. [#4605](https://github.com/mapbox/mapbox-navigation-android/pull/4605)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.3` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.3))
+- Mapbox Navigation Native `v57.0.0`
+- Mapbox Core Common `v14.2.0`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.1.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.9.4 - Jul 14, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+- Added ability to restore from "backwards snapping" issue: set `noRouteLength` to 150m. [#4610](https://github.com/mapbox/mapbox-navigation-android/pull/4610)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-beta.19` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-beta.19))
+- Mapbox Navigation Native `v48.0.7`
+- Mapbox Core Common `v11.0.2`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v3.1.1`
+- Mapbox Android Telemetry `v6.2.2`
+
+## Mapbox Navigation SDK 2.0.0-beta.18 - July 9, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Features
+- Deleted `MapboxHistoryRecorder.saveHistory` in favor of `MapboxHistoryRecorder.stopRecording`. [#4587](https://github.com/mapbox/mapbox-navigation-android/pull/4587)
+- Added `MapboxHistoryRecorder.startRecording` and `MapboxHistoryRecorder.pushHistory`. [#4587](https://github.com/mapbox/mapbox-navigation-android/pull/4587)
+- :warning: Removed auto enabled history recording from `HistoryRecorderOptions`. [#4587](https://github.com/mapbox/mapbox-navigation-android/pull/4587)
+- :warning: Removed `RouteRequestCallback` and `Router.Callback` in favor of a single `RouterCallback` with improved failure reason accessibility. [#4577](https://github.com/mapbox/mapbox-navigation-android/pull/4577)
+
+#### Bug fixes and improvements
+- Fixed stack overflow error that could happen when `NavigationCamera` state transitions were canceled while running on some Android API levels (definitely 21-24 and maybe more). [#4575](https://github.com/mapbox/mapbox-navigation-android/pull/4575)
+- Fixed an issue where navigation might crash with OutOfMemory error. [#4587](https://github.com/mapbox/mapbox-navigation-android/pull/4587)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.3` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.3))
+- Mapbox Navigation Native `v56.0.0`
+- Mapbox Core Common `v14.2.0`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.1.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.17 - July 2, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Features
+- Added missing `IncidentInfo` properties: `countryCodeAlpha2`, `countryCodeAlpha3`, `lanesBlocked`, `longDescription`, `lanesClearDesc`, `numLanesBlocked`. [#4569](https://github.com/mapbox/mapbox-navigation-android/pull/4569)
+- :warning: Refactored `MapboxManeuverApi` to return a list of maneuvers asynchronously without the road shields and either for a raw route reference or for route progress. See `MapboxManeuverApi#getManeuvers` and `MapboxManeuverView#renderManeuvers` for details. [#4482](https://github.com/mapbox/mapbox-navigation-android/pull/4482)
+- Refactored road shield downloader to make it more efficient. [#4482](https://github.com/mapbox/mapbox-navigation-android/pull/4482)
+- Added options to the `RouteArrowOptions` class for customizing the scaling expressions used for maneuver arrows. [#4551](https://github.com/mapbox/mapbox-navigation-android/pull/4551)
+- Added new `HistoryEvent`: `HistoryEventPushHistoryRecord` allows read events set with **type**-**properties** structure. [#4567](https://github.com/mapbox/mapbox-navigation-android/pull/4567)
+- :warning: Added new APIs to request and render road shields asynchronously, see `MapboxManeuverApi#getRoadShields` and `MapboxManeuverView#renderManeuverShields` for details. Shields are not automatically downloaded anymore to allow for more granular and faster initial updates. [#4482](https://github.com/mapbox/mapbox-navigation-android/pull/4482)
+- Exposed `RouteStepProgress#instructionIndex` that indicates which instruction out of the list of instructions for a step is the currently active one. [#4482](https://github.com/mapbox/mapbox-navigation-android/pull/4482)
+- :warning: Refactored `PredictiveCacheController` to handle multiple map instances, add the ability to filter sources to cache. [#4539](https://github.com/mapbox/mapbox-navigation-android/pull/4539)
+    - `fun setMapInstance(map: MapboxMap)` is replaced with `fun addMapInstance(map: MapboxMap,  sourceIdsToCache: List<String>)` to allow for more granular caching configuration and support multiple map instances at the same time.
+    - `fun removeMapInstance()` is replaced with `fun removeMapInstance(map: MapboxMap)`.
+    - `predictiveCacheLocationOptions: PredictiveCacheLocationOptions` is moved from `NavigationOptions` to `PredictiveCacheController`. 
+    -  Note: the map instance has to be configured with the same `TileStore` instance that was provided to `RoutingTilesOptions.tileStore` to best support predictive caching and offline features.
+
+#### Bug fixes and improvements
+- Fixed a bug where in some cases status updates were not generated after switching between offline and online states. [#4558](https://github.com/mapbox/mapbox-navigation-android/pull/4558)
+- Fixed an issue where `RouteOptions` weren't appended to onboard router results which could've caused incorrect reroutes that missed silent waypoints or other waypoint modifiers. [#4563](https://github.com/mapbox/mapbox-navigation-android/pull/4563)
+- Refactored dependency of `libnavui-resources` by changing from api to implementation. [#4568](https://github.com/mapbox/mapbox-navigation-android/pull/4568)
+- :warning: `RouteProgress#bannerInstructions` does not become `null` and keeps its reference for as long as a step is active. Listen to `BannerInstructionsObserver` if you need a specific timing event when the banner first appears. [#4482](https://github.com/mapbox/mapbox-navigation-android/pull/4482)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.2` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.2))
+- Mapbox Navigation Native `v55.0.0`
+- Mapbox Core Common `v14.0.1`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.1.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.16 - June 24, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+- Navigation SDK now respects the `OfflineSwitch` and will not make resource requests if the `setMapboxStackConnected` is set to `false`, it will use cached resources and immediately fallback to local generation of routes, even if connectivity is available. [#4529](https://github.com/mapbox/mapbox-navigation-android/pull/4529)
+- `RoadObjectMatcher` API changed. Added `cancelAll()` func, added `onMatchingCancelled(id: String)` callback to a `RoadObjectMatcherListener`, `cancel(roadObjectIds: List<String>)` handles a list of ids, not a single one. [#4542](https://github.com/mapbox/mapbox-navigation-android/pull/4542)
+- Migrated to callback-based native getStatus approach. [#4419](https://github.com/mapbox/mapbox-navigation-android/pull/4419)
+- Removed `routeGeometryWithBuffer` from `RouteProgress`. [#4419](https://github.com/mapbox/mapbox-navigation-android/pull/4419)
+- :warning: Internal `setUnconditionalPollingPatience` and `setUnconditionalPollingInterval` have been moved to `InternalUtils` `object` and have to be called _before_ `MapboxNavigation` is instantiated to actually take effect. [#4419](https://github.com/mapbox/mapbox-navigation-android/pull/4419)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.2` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.2))
+- Mapbox Navigation Native `v54.0.0`
+- Mapbox Core Common `v14.0.1`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.0.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.9.3 - Jun 23, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+- Fixed onboard router issue not supporting multiple exclude parameters. [#4534](https://github.com/mapbox/mapbox-navigation-android/pull/4534)
+- When traversing routes that wrap around behind the vehicle (e.g.: cloverleafs and circular on-ramps) the zoom level is now held constant. [#4468](https://github.com/mapbox/mapbox-navigation-android/pull/4468)
+- Restored an option to display restricted sections of a route on the route line.  The option is included in the `MapboxRouteLineOptions` as `displayRestrictedRoadSections()`. The option is false by default indicating the restricted section will not be visible on the route line. [#4501](https://github.com/mapbox/mapbox-navigation-android/pull/4501)
+- Navigation SDK now respects the `NetworkConnectivity` settings and will not make resource request if the `setMapboxStackConnected` is set to `false`, it will use cached resources and immediately fallback to local generation of routes, even if connectivity is available. [#4529](https://github.com/mapbox/mapbox-navigation-android/pull/4529)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-beta.19` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-beta.19))
+- Mapbox Navigation Native `v48.0.6`
+- Mapbox Core Common `v11.0.2`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v3.1.1`
+- Mapbox Android Telemetry `v6.2.2`
+
+## Mapbox Navigation SDK 2.0.0-beta.15 - June 18, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+* Fixed a bug in `RouteOptionsUpdater` where `snappingClosures` were not taken into account when making a reroute request. [4503](https://github.com/mapbox/mapbox-navigation-android/pull/4503)
+* Fixed missing `Gantry` objects in `ElectronicHorizon`. [#4518](https://github.com/mapbox/mapbox-navigation-android/pull/4518)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-rc.1` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-rc.1))
+- Mapbox Navigation Native `v53.0.1`
+- Mapbox Core Common `v14.0.1`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v5.0.0`
+- Mapbox Android Telemetry `v8.0.0`
+
+## Mapbox Navigation SDK 2.0.0-beta.14 - June 11, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+* :warning: Removed `ArrivalOptions` in favor of triggering when the `RouteProgress.currentState` is equal to `RouteProgressState.COMPLETE`. You can use `RouteProgress` to implement custom arrival behavior based on time or distance. [4459](https://github.com/mapbox/mapbox-navigation-android/pull/4459)
+* :warning: Removed `MapboxNavigation#toggleHistory` in favor of `HistoryRecorderOptions` (found in the `NavigationOptions`), `MapboxHistoryRecorder`, `MapboxHistoryReader` for saving and reading native history files. [4488](https://github.com/mapbox/mapbox-navigation-android/pull/4488)
+* When traversing routes that wrap around behind the vehicle (e.g.: cloverleafs and circular on-ramps) the zoom level is now held constant by the `MapboxNavigationViewportDataSource`. [4468](https://github.com/mapbox/mapbox-navigation-android/pull/4468)
+
+#### Known issues
+When using this release, the merged Manifest comes with an unnecessary `WRITE_SETTINGS` permission declaration. You can ignore that permission and not request it or add this to your Manifest file as a workaround:
+```
+<uses-permission android:name="android.permission.WRITE_SETTINGS" tools:node="remove"/>
+```
+This permission declaration will be removed in future releases.
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-beta.20` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-beta.20))
+- Mapbox Navigation Native `v51.0.0`
+- Mapbox Core Common `v12.0.0`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v4.0.2`
+- Mapbox Android Telemetry `v7.0.3`
+
+## Mapbox Navigation SDK 2.0.0-beta.13 - June 4, 2021
+
+For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).
+
+### Changelog
+#### Bug fixes and improvements
+* Removed `getRouteGeometryWithBuffer` API from `RouteProgress`. [#4478](https://github.com/mapbox/mapbox-navigation-android/pull/4478)
+* Removed the `updatePrimaryRoute` method from the `MapboxRouteLineApi` class. Instead, `MapboxRouteLineApi::setRoutes` should be used. The first `DirectionsRoute` in the collection will be considered the primary route. [#4467](https://github.com/mapbox/mapbox-navigation-android/pull/4467)
+* Added NavigationVersionSwitchObserver which enables listening to navigation tiles version switch. [#4451](https://github.com/mapbox/mapbox-navigation-android/pull/4451)
+* Added missing `@JvmOverloads` to `MapboxNavigation#postUserFeedback` API. [#4472](https://github.com/mapbox/mapbox-navigation-android/pull/4472)
+* Fixed an issue where routing tiles were not downloading correctly if the `TileStore` instance was not provided and `mapbox_access_token` string resource was not present. This was resulting in a lack of free drive events and location enhancement failures. [#4464](https://github.com/mapbox/mapbox-navigation-android/pull/4464)
+* Removed `com.mapbox.navigation.ui.base.model.Expected` in favor of `com.mapobox.bindgen.Expected`. [#4463](https://github.com/mapbox/mapbox-navigation-android/pull/4463)
+
+#### Known issues
+:warning: `MapboxNavigation` history recording APIs `retrieveHistory`, `toggleHistory` and `addHistoryEvent` are no-op in this release. [#4478](https://github.com/mapbox/mapbox-navigation-android/pull/4478)
+
+### Mapbox dependencies
+This release depends, and has been tested with, the following Mapbox dependencies:
+
+- Mapbox Maps SDK `v10.0.0-beta.20` ([release notes](https://github.com/mapbox/mapbox-maps-android/releases/tag/android-v10.0.0-beta.20))
+- Mapbox Navigation Native `v51.0.0`
+- Mapbox Core Common `v12.0.0`
+- Mapbox Java `5.9.0-alpha.5` ([release notes](https://github.com/mapbox/mapbox-java/releases/tag/v5.9.0-alpha.5))
+- Mapbox Android Core `v4.0.2`
+- Mapbox Android Telemetry `v7.0.3`
+
 ## Mapbox Navigation SDK 2.0.0-beta.9.2 - May 28, 2021
 
 For details on how v2 differs from v1 and guidance on migrating from v1 of the Mapbox Navigation SDK for Android to the v2 public preview, see [2.0 Navigation SDK Migration Guide](https://github.com/mapbox/mapbox-navigation-android/wiki/2.0-Navigation-SDK-Migration-Guide).

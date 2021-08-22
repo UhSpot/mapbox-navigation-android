@@ -15,6 +15,7 @@ import com.mapbox.api.directions.v5.models.ManeuverModifier
 import com.mapbox.api.directions.v5.models.StepManeuver
 import com.mapbox.bindgen.Expected
 import com.mapbox.bindgen.ExpectedFactory
+import com.mapbox.geojson.Point
 import com.mapbox.navigation.ui.maneuver.R
 import com.mapbox.navigation.ui.maneuver.model.Component
 import com.mapbox.navigation.ui.maneuver.model.DelimiterComponentNode
@@ -30,7 +31,6 @@ import com.mapbox.navigation.ui.maneuver.model.SecondaryManeuver
 import com.mapbox.navigation.ui.maneuver.model.StepDistance
 import com.mapbox.navigation.ui.maneuver.model.SubManeuver
 import com.mapbox.navigation.ui.maneuver.model.TextComponentNode
-import com.mapbox.navigation.ui.maneuver.model.TotalManeuverDistance
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -151,11 +151,13 @@ class MapboxManeuverViewTest {
     fun `render step distance remaining`() {
         val view = MapboxManeuverView(ctx)
         val expected = SpannableString("13 mi")
+        val totalDistance = 75.0
         val stepDistanceRemaining = 45.0
         val stepDistance = StepDistance(
             mockk {
                 every { formatDistance(stepDistanceRemaining) } returns SpannableString("13 mi")
             },
+            totalDistance,
             stepDistanceRemaining
         )
 
@@ -168,10 +170,29 @@ class MapboxManeuverViewTest {
     @Test
     fun `render maneuver list`() {
         val view = MapboxManeuverView(ctx)
-        val maneuverList = getManeuverList()
-        val expected = getManeuverList().size
+        val subManeuver = getMockSubManeuver()
+        val primary = getMockPrimaryManeuver()
+        val secondaryManeuver = getMockSecondaryManeuver()
+        val totalDistance = 75.0
+        val stepDistanceRemaining = 45.0
+        val stepDistance = StepDistance(
+            mockk {
+                every { formatDistance(stepDistanceRemaining) } returns SpannableString("13 mi")
+            },
+            totalDistance,
+            stepDistanceRemaining
+        )
+        val lane = null
+        val point = Point.fromLngLat(-122.345234, 37.899765)
+        val list: Expected<ManeuverError, List<Maneuver>> = ExpectedFactory.createValue(
+            listOf(
+                Maneuver(primary, stepDistance, secondaryManeuver, subManeuver, lane, point),
+                Maneuver(primary, stepDistance, secondaryManeuver, subManeuver, lane, point)
+            )
+        )
+        val expected = list.value?.subList(1, list.value!!.size)!!.size
 
-        view.renderUpcomingManeuvers(maneuverList)
+        view.renderManeuvers(list)
         val actual =
             view.findViewById<MapboxManeuversList>(R.id.upcomingManeuverRecycler).adapter?.itemCount
 
@@ -181,13 +202,30 @@ class MapboxManeuverViewTest {
     @Test
     fun `render maneuver list empty list`() {
         val view = MapboxManeuverView(ctx)
-        val upcomingManeuvers = listOf<Maneuver>()
-        val expected = 0
+        val subManeuver = getMockSubManeuver()
+        val primary = getMockPrimaryManeuver()
+        val secondaryManeuver = getMockSecondaryManeuver()
+        val totalDistance = 75.0
+        val stepDistanceRemaining = 45.0
+        val stepDistance = StepDistance(
+            mockk {
+                every { formatDistance(stepDistanceRemaining) } returns SpannableString("13 mi")
+            },
+            totalDistance,
+            stepDistanceRemaining
+        )
+        val laneGuidance = null
+        val point = Point.fromLngLat(-122.345234, 37.899765)
+        val list: Expected<ManeuverError, List<Maneuver>> = ExpectedFactory.createValue(
+            listOf(
+                Maneuver(primary, stepDistance, secondaryManeuver, subManeuver, laneGuidance, point)
+            )
+        )
+        val expected = list.value?.subList(1, list.value!!.size)!!.size
 
-        view.renderUpcomingManeuvers(upcomingManeuvers)
-
+        view.renderManeuvers(list)
         val actual =
-            view.findViewById<RecyclerView>(R.id.upcomingManeuverRecycler).adapter?.itemCount
+            view.findViewById<MapboxManeuversList>(R.id.upcomingManeuverRecycler).adapter?.itemCount
 
         assertEquals(expected, actual)
     }
@@ -474,20 +512,30 @@ class MapboxManeuverViewTest {
     fun `render maneuver with primary`() {
         val view = MapboxManeuverView(ctx)
         val subManeuver = getMockSubManeuver()
-        val primaryManeuver = getMockPrimaryManeuver()
+        val primary = getMockPrimaryManeuver()
         val secondaryManeuver = getMockSecondaryManeuver()
-        val stepDistance = TotalManeuverDistance(45.0)
+        val totalDistance = 75.0
+        val stepDistanceRemaining = 45.0
+        val stepDistance = StepDistance(
+            mockk {
+                every { formatDistance(stepDistanceRemaining) } returns SpannableString("13 mi")
+            },
+            totalDistance,
+            stepDistanceRemaining
+        )
         val laneGuidance = null
-        val mockExpected: Expected<ManeuverError, Maneuver> = ExpectedFactory.createValue(
-            Maneuver(
-                primaryManeuver, stepDistance, secondaryManeuver, subManeuver, laneGuidance
+
+        val point = Point.fromLngLat(-122.345234, 37.899765)
+        val mockExpected: Expected<ManeuverError, List<Maneuver>> = ExpectedFactory.createValue(
+            listOf(
+                Maneuver(primary, stepDistance, secondaryManeuver, subManeuver, laneGuidance, point)
             )
         )
 
-        view.renderManeuver(mockExpected)
+        view.renderManeuvers(mockExpected)
 
         assertEquals(
-            primaryManeuver.text.plus(" "),
+            primary.text.plus(" "),
             view.findViewById<MapboxPrimaryManeuver>(R.id.primaryManeuverText).text.toString()
         )
     }
@@ -503,6 +551,7 @@ class MapboxManeuverViewTest {
                 .build()
         )
         return mockk {
+            every { id } returns "1234abcd"
             every { text } returns "Central Fremont"
             every { type } returns StepManeuver.TURN
             every { degrees } returns null
@@ -518,7 +567,6 @@ class MapboxManeuverViewTest {
             RoadShieldComponentNode
                 .Builder()
                 .text("I-880")
-                .shieldIcon(null)
                 .build()
         )
         val delimiterComponentNode = Component(
@@ -538,6 +586,7 @@ class MapboxManeuverViewTest {
                 .build()
         )
         return mockk {
+            every { id } returns "1a2b3c4d"
             every { text } returns "I-880/Stivers Street"
             every { type } returns StepManeuver.TURN
             every { degrees } returns null
@@ -588,6 +637,7 @@ class MapboxManeuverViewTest {
                 .build()
         )
         return mockk {
+            every { id } returns "abcd1234"
             every { text } returns "Exit 23 I-880/Stivers Street"
             every { type } returns StepManeuver.TURN
             every { degrees } returns null
@@ -616,61 +666,5 @@ class MapboxManeuverViewTest {
             every { activeDirection } returns ManeuverModifier.LEFT
             every { allLanes } returns listOf(laneIndicator1, laneIndicator2)
         }
-    }
-
-    private fun getManeuverList(): List<Maneuver> {
-        val totalStepDistance1 = mockk<TotalManeuverDistance>()
-        val primaryManeuver1 = mockk<PrimaryManeuver> {
-            every { text } returns "Central Fremont"
-            every { type } returns StepManeuver.TURN
-            every { degrees } returns null
-            every { modifier } returns ManeuverModifier.RIGHT
-            every { drivingSide } returns null
-            every { componentList } returns listOf(
-                Component(
-                    BannerComponents.TEXT,
-                    TextComponentNode
-                        .Builder()
-                        .text("Central Fremont")
-                        .abbr(null)
-                        .abbrPriority(null)
-                        .build()
-                )
-            )
-        }
-        val maneuver1 = Maneuver(
-            primaryManeuver1,
-            totalStepDistance1,
-            null,
-            null,
-            null
-        )
-        val totalStepDistance2 = mockk<TotalManeuverDistance>()
-        val primaryManeuver2 = mockk<PrimaryManeuver> {
-            every { text } returns "Besco Drive"
-            every { type } returns StepManeuver.TURN
-            every { degrees } returns null
-            every { modifier } returns ManeuverModifier.LEFT
-            every { drivingSide } returns null
-            every { componentList } returns listOf(
-                Component(
-                    BannerComponents.TEXT,
-                    TextComponentNode
-                        .Builder()
-                        .text("Besco Drive")
-                        .abbr(null)
-                        .abbrPriority(null)
-                        .build()
-                )
-            )
-        }
-        val maneuver2 = Maneuver(
-            primaryManeuver2,
-            totalStepDistance2,
-            null,
-            null,
-            null
-        )
-        return listOf(maneuver1, maneuver2)
     }
 }

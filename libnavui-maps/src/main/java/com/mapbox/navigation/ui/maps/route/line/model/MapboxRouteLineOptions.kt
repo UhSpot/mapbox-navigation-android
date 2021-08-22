@@ -18,6 +18,11 @@ import com.mapbox.navigation.ui.maps.route.line.api.VanishingRouteLine
  * @param routeLineBelowLayerId determines the elevation of the route layers
  * @param vanishingRouteLine an instance of the VanishingRouteLine
  * @param tolerance the tolerance value used when configuring the underlying map source
+ * @param displayRestrictedRoadSections indicates if the route line will display restricted
+ * road sections with a dashed line
+ * @param styleInactiveRouteLegsIndependently enabling this feature will change the color of the route
+ * legs that aren't currently being navigated. See [RouteLineColorResources] to specify the color
+ * used.
  */
 class MapboxRouteLineOptions private constructor(
     val resourceProvider: RouteLineResources,
@@ -26,7 +31,9 @@ class MapboxRouteLineOptions private constructor(
     val destinationIcon: Drawable,
     val routeLineBelowLayerId: String?,
     internal var vanishingRouteLine: VanishingRouteLine? = null,
-    val tolerance: Double
+    val tolerance: Double,
+    val displayRestrictedRoadSections: Boolean = false,
+    val styleInactiveRouteLegsIndependently: Boolean = false
 ) {
 
     /**
@@ -42,7 +49,9 @@ class MapboxRouteLineOptions private constructor(
             routeLineBelowLayerId,
             routeLayerProvider.routeStyleDescriptors,
             vanishingRouteLineEnabled,
-            tolerance
+            tolerance,
+            displayRestrictedRoadSections,
+            styleInactiveRouteLegsIndependently
         )
     }
 
@@ -62,6 +71,9 @@ class MapboxRouteLineOptions private constructor(
         if (routeLineBelowLayerId != other.routeLineBelowLayerId) return false
         if (vanishingRouteLine != other.vanishingRouteLine) return false
         if (tolerance != other.tolerance) return false
+        if (displayRestrictedRoadSections != other.displayRestrictedRoadSections) return false
+        if (styleInactiveRouteLegsIndependently != other.styleInactiveRouteLegsIndependently)
+            return false
 
         return true
     }
@@ -77,6 +89,8 @@ class MapboxRouteLineOptions private constructor(
         result = 31 * result + (routeLineBelowLayerId?.hashCode() ?: 0)
         result = 31 * result + (vanishingRouteLine?.hashCode() ?: 0)
         result = 31 * result + (tolerance.hashCode())
+        result = 31 * result + (displayRestrictedRoadSections.hashCode())
+        result = 31 * result + (styleInactiveRouteLegsIndependently.hashCode())
         return result
     }
 
@@ -90,7 +104,10 @@ class MapboxRouteLineOptions private constructor(
             "destinationIcon=$destinationIcon, " +
             "routeLineBelowLayerId=$routeLineBelowLayerId, " +
             "vanishingRouteLine=$vanishingRouteLine, " +
-            "tolerance=$tolerance)"
+            "tolerance=$tolerance, " +
+            "displayRestrictedRoadSections=$displayRestrictedRoadSections, " +
+            "styleInactiveRouteLegsIndependently=$styleInactiveRouteLegsIndependently" +
+            ")"
     }
 
     /**
@@ -101,6 +118,11 @@ class MapboxRouteLineOptions private constructor(
      * @param routeLineBelowLayerId determines the elevation of the route layers
      * @param routeStyleDescriptors a collection of RouteStyleDescriptor objects
      * @param vanishingRouteLineEnabled indicates if the vanishing route line feature is enabled
+     * @param displayRestrictedRoadSections indicates if the route line will display restricted
+     * road sections with a dashed line
+     * @param styleInactiveRouteLegsIndependently enabling this feature will change the color of the route
+     * legs that aren't currently being navigated. See [RouteLineColorResources] to specify the color
+     * used.
      */
     class Builder internal constructor(
         private val context: Context,
@@ -108,7 +130,9 @@ class MapboxRouteLineOptions private constructor(
         private var routeLineBelowLayerId: String?,
         private var routeStyleDescriptors: List<RouteStyleDescriptor>,
         private var vanishingRouteLineEnabled: Boolean,
-        private var tolerance: Double
+        private var tolerance: Double,
+        private var displayRestrictedRoadSections: Boolean,
+        private var styleInactiveRouteLegsIndependently: Boolean
     ) {
 
         /**
@@ -122,7 +146,9 @@ class MapboxRouteLineOptions private constructor(
             null,
             listOf(),
             false,
-            DEFAULT_ROUTE_SOURCES_TOLERANCE
+            DEFAULT_ROUTE_SOURCES_TOLERANCE,
+            false,
+            false
         )
 
         /**
@@ -179,6 +205,21 @@ class MapboxRouteLineOptions private constructor(
             apply { this.routeStyleDescriptors = routeStyleDescriptors }
 
         /**
+         * Indicates if the route line will display restricted
+         * road sections with a dashed line. False by default.
+         */
+        fun displayRestrictedRoadSections(displayRestrictedRoadSections: Boolean): Builder =
+            apply { this.displayRestrictedRoadSections = displayRestrictedRoadSections }
+
+        /**
+         * Enabling this feature will result in route legs that aren't currently being navigated
+         * to be color differently than the active leg. See [RouteLineColorResources] for the
+         * color option.
+         */
+        fun styleInactiveRouteLegsIndependently(enable: Boolean): Builder =
+            apply { this.styleInactiveRouteLegsIndependently = enable }
+
+        /**
          * @return an instance of [MapboxRouteLineOptions]
          */
         fun build(): MapboxRouteLineOptions {
@@ -218,7 +259,9 @@ class MapboxRouteLineOptions private constructor(
                 destinationIcon!!,
                 routeLineBelowLayerId,
                 vanishingRouteLine,
-                tolerance
+                tolerance,
+                displayRestrictedRoadSections,
+                styleInactiveRouteLegsIndependently
             )
         }
     }

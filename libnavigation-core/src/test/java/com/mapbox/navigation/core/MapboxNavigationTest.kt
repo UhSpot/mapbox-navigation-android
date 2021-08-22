@@ -4,12 +4,14 @@ import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Context
 import android.location.Location
+import android.net.ConnectivityManager
 import com.mapbox.android.core.location.LocationEngine
 import com.mapbox.android.telemetry.MapboxTelemetryConstants.MAPBOX_SHARED_PREFERENCES
 import com.mapbox.annotation.module.MapboxModuleType
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.base.common.logger.Logger
+import com.mapbox.common.MapboxSDKCommon
 import com.mapbox.common.module.provider.MapboxModuleProvider
 import com.mapbox.navigation.base.TimeFormat.NONE_SPECIFIED
 import com.mapbox.navigation.base.formatter.DistanceFormatterOptions
@@ -19,13 +21,15 @@ import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.options.RoutingTilesOptions
 import com.mapbox.navigation.base.route.RouteRefreshOptions
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterOrigin
+import com.mapbox.navigation.base.trip.model.RouteLegProgress
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.base.trip.notification.TripNotification
 import com.mapbox.navigation.core.arrival.ArrivalController
 import com.mapbox.navigation.core.arrival.ArrivalProgressObserver
 import com.mapbox.navigation.core.directions.session.DirectionsSession
 import com.mapbox.navigation.core.directions.session.RoutesObserver
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.reroute.RerouteController
 import com.mapbox.navigation.core.reroute.RerouteState
 import com.mapbox.navigation.core.routealternatives.RouteAlternativesController
@@ -35,6 +39,7 @@ import com.mapbox.navigation.core.routerefresh.RouteRefreshControllerProvider
 import com.mapbox.navigation.core.telemetry.MapboxNavigationTelemetry
 import com.mapbox.navigation.core.trip.service.TripService
 import com.mapbox.navigation.core.trip.session.MapMatcherResultObserver
+import com.mapbox.navigation.core.trip.session.NavigationSession
 import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.navigation.core.trip.session.RoadObjectsOnRouteObserver
 import com.mapbox.navigation.core.trip.session.TripSession
@@ -42,10 +47,15 @@ import com.mapbox.navigation.navigator.internal.MapboxNativeNavigator
 import com.mapbox.navigation.testing.MainCoroutineRule
 import com.mapbox.navigation.utils.internal.LoggerProvider
 import com.mapbox.navigation.utils.internal.ThreadController
+import com.mapbox.navigator.FallbackVersionsObserver
 import com.mapbox.navigator.NavigatorConfig
 import com.mapbox.navigator.TilesConfig
 import io.mockk.Ordering
+import io.mockk.Runs
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.mockkStatic
@@ -55,8 +65,10 @@ import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -64,11 +76,16 @@ import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 import java.util.Locale
 
+@Config(shadows = [ShadowReachabilityFactory::class])
 @InternalCoroutinesApi
 @ExperimentalCoroutinesApi
+@RunWith(RobolectricTestRunner::class)
 class MapboxNavigationTest {
 
     @get:Rule
@@ -87,7 +104,7 @@ class MapboxNavigationTest {
     private val routeAlternativesController: RouteAlternativesController =
         mockk(relaxUnitFun = true)
     private val routeProgress: RouteProgress = mockk(relaxed = true)
-    private val navigationSession: NavigationSession = mockk(relaxUnitFun = true)
+    private val navigationSession: NavigationSession = mockk(relaxed = true)
     private val logger: Logger = mockk(relaxUnitFun = true)
     private lateinit var rerouteController: RerouteController
     private lateinit var navigationOptions: NavigationOptions
@@ -110,6 +127,8 @@ class MapboxNavigationTest {
         every { packageName } returns "com.mapbox.navigation.core.MapboxNavigationTest"
         every { filesDir } returns File("some/path")
         every { navigator.cache } returns mockk()
+        every { navigator.getHistoryRecorderHandle() } returns null
+        every { navigator.experimental } returns mockk()
     }
 
     private lateinit var mapboxNavigation: MapboxNavigation
@@ -126,6 +145,10 @@ class MapboxNavigationTest {
 
     @Before
     fun setUp() {
+        mockkObject(MapboxSDKCommon)
+        every {
+            MapboxSDKCommon.getContext().getSystemService(Context.CONNECTIVITY_SERVICE)
+        } returns mockk<ConnectivityManager>()
         mockkObject(MapboxModuleProvider)
 
         val hybridRouter: Router = mockk(relaxUnitFun = true)
@@ -146,6 +169,11 @@ class MapboxNavigationTest {
 
         mockkObject(NavigationComponentProvider)
         mockkObject(RouteRefreshControllerProvider)
+        every {
+            RouteRefreshControllerProvider.createRouteRefreshController(
+                any(), any(), any(), any()
+            )
+        } returns routeRefreshController
         mockkObject(RouteAlternativesControllerProvider)
         every {
             RouteAlternativesControllerProvider.create(any(), any(), any(), any(), any())
@@ -162,7 +190,7 @@ class MapboxNavigationTest {
         mockDirectionSession()
         mockNavigationSession()
 
-        every { navigator.create(any(), any(), any(), any()) } returns navigator
+        every { navigator.create(any(), any(), any(), any(), any()) } returns navigator
 
         mapboxNavigation = MapboxNavigation(navigationOptions)
 
@@ -172,6 +200,7 @@ class MapboxNavigationTest {
 
     @After
     fun tearDown() {
+        unmockkObject(MapboxSDKCommon)
         unmockkObject(MapboxModuleProvider)
         unmockkObject(LoggerProvider)
         unmockkObject(NavigationComponentProvider)
@@ -240,49 +269,37 @@ class MapboxNavigationTest {
     @Test
     fun `restart the routeRefreshController during initialization`() {
         ThreadController.cancelAllUICoroutines()
-        every {
-            RouteRefreshControllerProvider.createRouteRefreshController(
-                any(), any(), any(), any()
-            )
-        } returns routeRefreshController
-        every { routeRefreshController.restart() } returns mockk()
-
-        mapboxNavigation = MapboxNavigation(
-            provideNavigationOptions()
-                .routeRefreshOptions(
-                    RouteRefreshOptions.Builder()
-                        .enabled(true)
-                        .build()
-                )
-                .build()
-        )
-
         verify(exactly = 1) { routeRefreshController.restart() }
     }
 
     @Test
     fun `restart the routeRefreshController if new route is set`() {
         ThreadController.cancelAllUICoroutines()
-        every {
-            RouteRefreshControllerProvider.createRouteRefreshController(
-                any(), any(), any(), any()
-            )
-        } returns routeRefreshController
-        every { routeRefreshController.restart() } returns mockk()
 
         mapboxNavigation = MapboxNavigation(
             provideNavigationOptions()
                 .routeRefreshOptions(
                     RouteRefreshOptions.Builder()
-                        .enabled(true)
                         .build()
                 )
                 .build()
         )
-        val routes = listOf(mockk<DirectionsRoute>())
-        mapboxNavigation.setRoutes(routes)
+        val route: DirectionsRoute = mockk()
+        val routeOptions: RouteOptions = mockk()
+        every { route.routeOptions() } returns routeOptions
+        every { route.geometry() } returns "geometry"
+        every { route.legs() } returns emptyList()
+        every { routeOptions.overview() } returns "full"
+        every { routeOptions.annotationsList() } returns emptyList()
+        every { routeOptions.enableRefresh() } returns true
+        mapboxNavigation.setRoutes(listOf(route))
 
-        verify(exactly = 2) { routeRefreshController.restart() }
+        // the sequence needs to be kept because routeRefreshController uses the route stored
+        // in the trip session, which has to be set first via directionsSession
+        verifyOrder {
+            directionsSession.routes = listOf(route)
+            routeRefreshController.restart()
+        }
     }
 
     @Test
@@ -542,7 +559,7 @@ class MapboxNavigationTest {
 
     @Test
     fun interrupt_reroute_on_set_routes() {
-        mapboxNavigation.setRoutes(mockk())
+        mapboxNavigation.setRoutes(listOf())
 
         verify(exactly = 1) { rerouteController.interrupt() }
 
@@ -561,7 +578,7 @@ class MapboxNavigationTest {
 
     @Test
     fun `interrupt route alternatives on set route`() {
-        mapboxNavigation.setRoutes(mockk())
+        mapboxNavigation.setRoutes(listOf())
 
         verify(exactly = 1) { routeAlternativesController.interrupt() }
 
@@ -622,7 +639,9 @@ class MapboxNavigationTest {
         ThreadController.cancelAllUICoroutines()
         val slot = slot<TilesConfig>()
         every {
-            NavigationComponentProvider.createNativeNavigator(any(), any(), capture(slot), any())
+            NavigationComponentProvider.createNativeNavigator(
+                any(), any(), capture(slot), any(), any()
+            )
         } returns navigator
         val options = navigationOptions.toBuilder()
             .routingTilesOptions(RoutingTilesOptions.Builder().build())
@@ -640,7 +659,9 @@ class MapboxNavigationTest {
         ThreadController.cancelAllUICoroutines()
         val slot = slot<TilesConfig>()
         every {
-            NavigationComponentProvider.createNativeNavigator(any(), any(), capture(slot), any())
+            NavigationComponentProvider.createNativeNavigator(
+                any(), any(), capture(slot), any(), any()
+            )
         } returns navigator
         val options = navigationOptions.toBuilder()
             .routingTilesOptions(
@@ -663,7 +684,9 @@ class MapboxNavigationTest {
         ThreadController.cancelAllUICoroutines()
         val slot = slot<NavigatorConfig>()
         every {
-            NavigationComponentProvider.createNativeNavigator(any(), capture(slot), any(), any())
+            NavigationComponentProvider.createNativeNavigator(
+                any(), capture(slot), any(), any(), any()
+            )
         } returns navigator
 
         mapboxNavigation = MapboxNavigation(navigationOptions)
@@ -678,7 +701,9 @@ class MapboxNavigationTest {
         ThreadController.cancelAllUICoroutines()
         val slot = slot<NavigatorConfig>()
         every {
-            NavigationComponentProvider.createNativeNavigator(any(), capture(slot), any(), any())
+            NavigationComponentProvider.createNativeNavigator(
+                any(), capture(slot), any(), any(), any()
+            )
         } returns navigator
         val options = navigationOptions.toBuilder()
             .incidentsOptions(
@@ -701,7 +726,9 @@ class MapboxNavigationTest {
         ThreadController.cancelAllUICoroutines()
         val slot = slot<NavigatorConfig>()
         every {
-            NavigationComponentProvider.createNativeNavigator(any(), capture(slot), any(), any())
+            NavigationComponentProvider.createNativeNavigator(
+                any(), capture(slot), any(), any(), any()
+            )
         } returns navigator
         val options = navigationOptions.toBuilder()
             .incidentsOptions(
@@ -721,7 +748,15 @@ class MapboxNavigationTest {
 
     @Test
     fun `setRoute pushes the route to the directions session`() {
-        val routes = listOf(mockk<DirectionsRoute>())
+        val route: DirectionsRoute = mockk()
+        val routeOptions: RouteOptions = mockk()
+        every { route.routeOptions() } returns routeOptions
+        every { route.geometry() } returns "geometry"
+        every { route.legs() } returns emptyList()
+        every { routeOptions.overview() } returns "full"
+        every { routeOptions.annotationsList() } returns emptyList()
+
+        val routes = listOf(route)
 
         mapboxNavigation.setRoutes(routes)
 
@@ -731,7 +766,7 @@ class MapboxNavigationTest {
     @Test
     fun `requestRoutes pushes the request to the directions session`() {
         val options = mockk<RouteOptions>()
-        val callback = mockk<RoutesRequestCallback>()
+        val callback = mockk<RouterCallback>()
         every { directionsSession.requestRoutes(options, callback) } returns 1L
 
         mapboxNavigation.requestRoutes(options, callback)
@@ -742,7 +777,7 @@ class MapboxNavigationTest {
     fun `requestRoutes passes back the request id`() {
         val expected = 1L
         val options = mockk<RouteOptions>()
-        val callback = mockk<RoutesRequestCallback>()
+        val callback = mockk<RouterCallback>()
         every { directionsSession.requestRoutes(options, callback) } returns expected
 
         val actual = mapboxNavigation.requestRoutes(options, callback)
@@ -754,12 +789,13 @@ class MapboxNavigationTest {
     fun `requestRoutes doesn't pushes the route to the directions session automatically`() {
         val routes = listOf(mockk<DirectionsRoute>())
         val options = mockk<RouteOptions>()
-        val possibleInternalCallbackSlot = slot<RoutesRequestCallback>()
+        val possibleInternalCallbackSlot = slot<RouterCallback>()
+        val origin = mockk<RouterOrigin>()
         every { directionsSession.requestRoutes(options, any()) } returns 1L
 
         mapboxNavigation.requestRoutes(options, mockk(relaxUnitFun = true))
         verify { directionsSession.requestRoutes(options, capture(possibleInternalCallbackSlot)) }
-        possibleInternalCallbackSlot.captured.onRoutesReady(routes)
+        possibleInternalCallbackSlot.captured.onRoutesReady(routes, origin)
 
         verify(exactly = 0) { directionsSession.routes = routes }
     }
@@ -778,6 +814,143 @@ class MapboxNavigationTest {
         verify(exactly = 1) { directionsSession.shutdown() }
     }
 
+    @Test
+    fun `register internalFallbackVersionsObserver`() {
+        verify(exactly = 1) { tripSession.registerFallbackVersionsObserver(any()) }
+
+        mapboxNavigation.onDestroy()
+    }
+
+    @Test
+    fun `unregisterAllFallbackVersionsObservers on destroy`() {
+        mapboxNavigation.onDestroy()
+
+        verify(exactly = 1) { tripSession.unregisterAllFallbackVersionsObservers() }
+    }
+
+    @Test
+    fun `verify tile config tilesVersion and isFallback on init`() {
+        ThreadController.cancelAllUICoroutines()
+        val slot = slot<TilesConfig>()
+        every {
+            NavigationComponentProvider.createNativeNavigator(
+                any(), any(), capture(slot), any(), any()
+            )
+        } returns navigator
+        val tilesVersion = "tilesVersion"
+        val options = navigationOptions.toBuilder()
+            .routingTilesOptions(
+                RoutingTilesOptions.Builder()
+                    .tilesVersion(tilesVersion)
+                    .build()
+            )
+            .build()
+
+        mapboxNavigation = MapboxNavigation(options)
+
+        assertEquals(tilesVersion, slot.captured.endpointConfig?.version)
+        assertFalse(slot.captured.endpointConfig?.isFallback!!)
+
+        mapboxNavigation.onDestroy()
+    }
+
+    @Test
+    fun `verify tile config tilesVersion and isFallback on fallback`() {
+        ThreadController.cancelAllUICoroutines()
+
+        val fallbackObserverSlot = slot<FallbackVersionsObserver>()
+        every {
+            tripSession.registerFallbackVersionsObserver(capture(fallbackObserverSlot))
+        } just Runs
+        every { tripSession.route } returns null
+        every { tripSession.getRouteProgress() } returns mockk()
+
+        mapboxNavigation = MapboxNavigation(navigationOptions)
+
+        val tileConfigSlot = slot<TilesConfig>()
+        every {
+            navigator.recreate(
+                any(),
+                any(),
+                capture(tileConfigSlot),
+                any(),
+                any()
+            )
+        } just Runs
+
+        val tilesVersion = "tilesVersion"
+        val latestTilesVersion = "latestTilesVersion"
+        fallbackObserverSlot.captured.onFallbackVersionsFound(
+            listOf(tilesVersion, latestTilesVersion)
+        )
+
+        assertEquals(latestTilesVersion, tileConfigSlot.captured.endpointConfig?.version)
+        assertTrue(tileConfigSlot.captured.endpointConfig?.isFallback!!)
+
+        mapboxNavigation.onDestroy()
+    }
+
+    @Test
+    fun `verify tile config tilesVersion and isFallback on return to latest tiles version`() {
+        ThreadController.cancelAllUICoroutines()
+
+        val fallbackObserverSlot = slot<FallbackVersionsObserver>()
+        every {
+            tripSession.registerFallbackVersionsObserver(capture(fallbackObserverSlot))
+        } just Runs
+        every { tripSession.route } returns null
+        every { tripSession.getRouteProgress() } returns mockk()
+
+        mapboxNavigation = MapboxNavigation(navigationOptions)
+
+        val tileConfigSlot = slot<TilesConfig>()
+        every {
+            navigator.recreate(
+                any(),
+                any(),
+                capture(tileConfigSlot),
+                any(),
+                any()
+            )
+        } just Runs
+
+        fallbackObserverSlot.captured.onCanReturnToLatest("")
+
+        assertEquals("", tileConfigSlot.captured.endpointConfig?.version)
+        assertFalse(tileConfigSlot.captured.endpointConfig?.isFallback!!)
+
+        mapboxNavigation.onDestroy()
+    }
+
+    @Test
+    fun `verify route and routeProgress are set after navigator recreation`() = runBlocking {
+        ThreadController.cancelAllUICoroutines()
+
+        val fallbackObserverSlot = slot<FallbackVersionsObserver>()
+        every {
+            tripSession.registerFallbackVersionsObserver(capture(fallbackObserverSlot))
+        } just Runs
+        val route: DirectionsRoute = mockk()
+        val routeProgress: RouteProgress = mockk()
+        val legProgress: RouteLegProgress = mockk()
+        val index = 137
+        every { tripSession.route } returns route
+        every { tripSession.getRouteProgress() } returns routeProgress
+        every { routeProgress.currentLegProgress } returns legProgress
+        every { legProgress.legIndex } returns index
+        coEvery { navigator.setRoute(any(), any()) } returns mockk()
+
+        mapboxNavigation = MapboxNavigation(navigationOptions)
+
+        fallbackObserverSlot.captured.onFallbackVersionsFound(listOf("version"))
+
+        coVerify {
+            navigator.setRoute(route, index)
+        }
+
+        mapboxNavigation.onDestroy()
+    }
+
     private fun mockLocation() {
         every { location.longitude } returns -122.789876
         every { location.latitude } returns 37.657483
@@ -786,7 +959,7 @@ class MapboxNavigationTest {
 
     private fun mockNativeNavigator() {
         every {
-            NavigationComponentProvider.createNativeNavigator(any(), any(), any(), any())
+            NavigationComponentProvider.createNativeNavigator(any(), any(), any(), any(), any())
         } returns navigator
     }
 
@@ -815,7 +988,7 @@ class MapboxNavigationTest {
     }
 
     private fun mockDirectionSession() {
-        every { NavigationComponentProvider.createDirectionsSession(any(), any()) } answers {
+        every { NavigationComponentProvider.createDirectionsSession(any()) } answers {
             directionsSession
         }
         // TODO Needed for telemetry - Free Drive (empty list) for now

@@ -7,8 +7,6 @@
     <string name="description_route_line" translatable="false">Demonstrates the use of the route line API.</string>
     <string name="title_camera" translatable="false">Camera Example</string>
     <string name="description_camera" translatable="false">Demonstrates the use of camera animations API.</string>
-    <string name="title_snapshotter" translatable="false">Snapshotter Example</string>
-    <string name="description_snapshotter" translatable="false">Demonstrates the use of snapshotter API.</string>
     <string name="title_signboard" translatable="false">Signboard Example</string>
     <string name="description_signboard" translatable="false">Demonstrates the use of signboard API.</string>
     <string name="title_junction" translatable="false">Junction Example</string>
@@ -26,6 +24,9 @@
     <string name="title_custom_style" translatable="false">Custom Style Example</string>
     <string name="description_custom_style" translatable="false">Demonstrates the use of custom styling.</string>
 
+    <string name="title_multileg_route" translatable="false">Hide inactive route legs.</string>
+    <string name="description_multileg_route" translatable="false">Demonstrates hiding inactive route legs.</string>
+
     <string name="title_multiple_arrows" translatable="false">Multiple Arrow Example</string>
     <string name="description_multiple_arrows" translatable="false">Demonstrates adding multiple arrows.</string>
 
@@ -42,5 +43,6 @@
     <string name="history_failed_to_load_item" translatable="false">History failed to load item</string>
     <string name="history_failed_to_load_list" translatable="false">Failed to load list</string>
     <string name="history_local_history_file" translatable="false">Local history file</string>
+    <string name="history_replay_directory" translatable="false">Replay directory</string>
     <string name="history_recorded_history_file" translatable="false">Recorded history file</string>
 </resources>

@@ -3,9 +3,9 @@ package com.mapbox.navigation.ui.maps.internal.route.line
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.HandlerThread
 import androidx.test.core.app.ApplicationProvider
 import com.mapbox.api.directions.v5.models.DirectionsRoute
-import com.mapbox.bindgen.Expected
 import com.mapbox.bindgen.ExpectedFactory
 import com.mapbox.bindgen.Value
 import com.mapbox.core.constants.Constants
@@ -14,15 +14,14 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.LayerPosition
 import com.mapbox.maps.Style
 import com.mapbox.maps.StyleObjectInfo
-import com.mapbox.maps.StylePropertyValue
-import com.mapbox.maps.StylePropertyValueKind
+import com.mapbox.maps.extension.style.layers.Layer
+import com.mapbox.maps.extension.style.layers.getLayer
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
+import com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
 import com.mapbox.maps.plugin.locationcomponent.LocationComponentConstants
-import com.mapbox.navigation.testing.FileUtils
 import com.mapbox.navigation.testing.FileUtils.loadJsonFixture
 import com.mapbox.navigation.ui.base.internal.model.route.RouteConstants
 import com.mapbox.navigation.ui.base.model.route.RouteLayerConstants
-import com.mapbox.navigation.ui.maps.common.ShadowValueConverter
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineUtils.getRestrictedRouteLegRanges
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
@@ -32,7 +31,9 @@ import com.mapbox.navigation.ui.maps.route.line.model.RouteLineTrafficExpression
 import com.mapbox.navigation.ui.maps.route.line.model.RouteStyleDescriptor
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.junit.Assert
 import org.junit.Assert.assertEquals
@@ -42,9 +43,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
-@Config(shadows = [ShadowValueConverter::class])
 @RunWith(RobolectricTestRunner::class)
 class MapboxRouteLineUtilsTest {
 
@@ -57,21 +56,20 @@ class MapboxRouteLineUtilsTest {
 
     @Test
     fun getTrafficLineExpressionTest() {
-        val expectedExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0," +
-            " [rgba, 86.0, 168.0, 251.0, 1.0], 0.015670907645820537, " +
-            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.11898525632162987, " +
+        val expectedExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0, " +
             "[rgba, 86.0, 168.0, 251.0, 1.0]]"
 
         val expressionDatas = listOf(
-            RouteLineExpressionData(0.0, -11097861),
-            RouteLineExpressionData(0.015670907645820537, -11097861),
-            RouteLineExpressionData(0.11898525632162987, -11097861)
+            RouteLineExpressionData(0.0, -11097861, 0),
+            RouteLineExpressionData(0.015670907645820537, -11097861, 0),
+            RouteLineExpressionData(0.11898525632162987, -11097861, 0)
         )
 
         val result = MapboxRouteLineUtils.getTrafficLineExpression(
             0.0,
-            expressionDatas,
-            -11097861
+            Color.TRANSPARENT,
+            -11097861,
+            expressionDatas
         )
 
         assertEquals(expectedExpression, result.toString())
@@ -80,45 +78,65 @@ class MapboxRouteLineUtilsTest {
     @Test
     fun getTrafficLineExpressionDuplicateOffsetsRemoved() {
         val expectedExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0, " +
-            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.7868200761181402, " +
-            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.7930120224665551, " +
-            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.7932530928525063, " +
-            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.7964017663976524, [rgba, 86.0, 168.0, 251.0, 1.0]]"
+            "[rgba, 86.0, 168.0, 251.0, 1.0], 0.7964017663976524, [rgba, 255.0, 0.0, 0.0, 1.0]]"
         val expressionDatas = listOf(
-            RouteLineExpressionData(0.7868200761181402, -11097861),
-            RouteLineExpressionData(0.7930120224665551, -11097861),
-            RouteLineExpressionData(0.7932530928525063, -11097861),
-            RouteLineExpressionData(0.7932530928525063, -11097861),
-            RouteLineExpressionData(0.7964017663976524, -11097861)
+            RouteLineExpressionData(0.7868200761181402, -11097861, 0),
+            RouteLineExpressionData(0.7930120224665551, -11097861, 0),
+            RouteLineExpressionData(0.7932530928525063, -11097861, 0),
+            RouteLineExpressionData(0.7932530928525063, -11097861, 0),
+            RouteLineExpressionData(0.7964017663976524, Color.RED, 0)
         )
 
         val result = MapboxRouteLineUtils.getTrafficLineExpression(
             0.0,
-            expressionDatas,
-            -11097861
+            Color.TRANSPARENT,
+            -11097861,
+            expressionDatas
         )
 
         assertEquals(result.toString(), expectedExpression)
     }
 
     @Test
+    fun getFilteredRouteLineExpressionDataDuplicateOffsetsRemoved() {
+        val expressionDatas = listOf(
+            RouteLineExpressionData(0.7868200761181402, -11097861, 0),
+            RouteLineExpressionData(0.7930120224665551, -11097861, 0),
+            RouteLineExpressionData(0.7932530928525063, -11097861, 0),
+            RouteLineExpressionData(0.7932530928525063, -11097861, 0),
+            RouteLineExpressionData(0.7964017663976524, -11097861, 0)
+        )
+
+        val result = MapboxRouteLineUtils.getFilteredRouteLineExpressionData(
+            0.0,
+            expressionDatas,
+            -11097861
+        )
+
+        assertEquals(2, expressionDatas.count { it.offset == 0.7932530928525063 })
+        assertEquals(1, result.count { it.offset == 0.7932530928525063 })
+    }
+
+    @Test
     fun getTrafficLineExpressionWithRouteRestrictions() {
         val expectedExpression = "[step, [line-progress], [rgba, 0.0, 0.0, 0.0, 0.0], 0.0, " +
-            "[rgba, 255.0, 255.0, 247.0, 1.0], 0.2940753606969524, [rgba, 255.0, 255.0, 255.0, " +
-            "1.0], 0.39813638288860653, [rgba, 255.0, 255.0, 247.0, 1.0], 0.44865144220494346," +
-            " [rgba, 0.0, 8.0, 73.0, 0.0], 0.45642298979207224, [rgba, 0.0, 0.0, 0.0, 0.0]," +
-            " 0.464194537379201, [rgba, 0.0, 8.0, 73.0, 0.0], 0.4719660849663298, [rgba, 0.0, " +
-            "0.0, 0.0, 0.0], 0.4797376325534585, [rgba, 0.0, 8.0, 73.0, 0.0], 0.4875091801405873," +
-            " [rgba, 0.0, 0.0, 0.0, 0.0], 0.4952807277277161, [rgba, 0.0, 8.0, 73.0, 0.0], " +
-            "0.5030522753148449, [rgba, 0.0, 0.0, 0.0, 0.0], 0.5108238229019736, [rgba, 0.0, " +
-            "8.0, 73.0, 0.0], 0.5185953704891023, [rgba, 0.0, 0.0, 0.0, 0.0], 0.5263669180762311," +
-            " [rgba, 0.0, 8.0, 73.0, 0.0], 0.5341384656633599, [rgba, 0.0, 0.0, 0.0, 0.0], " +
-            "0.5419100132504886, [rgba, 0.0, 8.0, 73.0, 0.0], 0.5429203144368153, [rgba, 255.0," +
-            " 255.0, 247.0, 1.0], 0.5502255691687163, [rgba, 255.0, 255.0, 255.0, 1.0], " +
-            "0.8240949061391339, [rgba, 255.0, 255.0, 247.0, 1.0], 0.8610097571779957, [rgba, " +
-            "0.0, 0.0, 33.0, 0.0], 0.8921736630023819, [rgba, 255.0, 255.0, 255.0, 1.0], " +
-            "0.9126128331565305, [rgba, 255.0, 255.0, 247.0, 1.0], 0.9451756175466001, [rgba, " +
-            "255.0, 255.0, 255.0, 1.0]]"
+            "[rgba, 255.0, 255.0, 247.0, 1.0], 0.2940753606969524, " +
+            "[rgba, 255.0, 255.0, 255.0, 1.0], 0.39813638288860653, " +
+            "[rgba, 255.0, 255.0, 247.0, 1.0], 0.44865144220494346, " +
+            "[rgba, 0.0, 8.0, 73.0, 0.0], 0.45642298979207224, [rgba, 0.0, 0.0, 0.0, 0.0], " +
+            "0.464194537379201, [rgba, 0.0, 8.0, 73.0, 0.0], 0.4765512980427357, " +
+            "[rgba, 0.0, 0.0, 0.0, 0.0], 0.4843228456298645, [rgba, 0.0, 8.0, 73.0, 0.0], " +
+            "0.4920943932169933, [rgba, 0.0, 0.0, 0.0, 0.0], 0.499865940804122, " +
+            "[rgba, 0.0, 8.0, 73.0, 0.0], 0.5110569693295874, [rgba, 0.0, 0.0, 0.0, 0.0], " +
+            "0.5188285169167162, [rgba, 0.0, 8.0, 73.0, 0.0], 0.526600064503845, " +
+            "[rgba, 0.0, 0.0, 0.0, 0.0], 0.5343716120909737, [rgba, 0.0, 8.0, 73.0, 0.0], " +
+            "0.5421431596781024, [rgba, 0.0, 0.0, 0.0, 0.0], 0.5429203144368153, " +
+            "[rgba, 255.0, 255.0, 247.0, 1.0], 0.5502255691687163, " +
+            "[rgba, 255.0, 255.0, 255.0, 1.0], 0.8240949061391339, " +
+            "[rgba, 255.0, 255.0, 247.0, 1.0], 0.8610097571779957, [rgba, 0.0, 0.0, 33.0, 0.0]," +
+            " 0.8921736630023819, [rgba, 255.0, 255.0, 255.0, 1.0], 0.9126128331565305, " +
+            "[rgba, 255.0, 255.0, 247.0, 1.0], 0.9451756175466001, " +
+            "[rgba, 255.0, 255.0, 255.0, 1.0]]"
         val colorResources = RouteLineColorResources.Builder()
             .routeUnknownTrafficColor(-9)
             .routeLowCongestionColor(-1)
@@ -137,13 +155,15 @@ class MapboxRouteLineUtilsTest {
             listOf(),
             true,
             colorResources,
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            true
         )
 
         val result = MapboxRouteLineUtils.getTrafficLineExpression(
             0.0,
-            segments,
-            -11097861
+            Color.TRANSPARENT,
+            -11097861,
+            segments
         )
 
         assertEquals(expectedExpression, result.toString())
@@ -154,7 +174,7 @@ class MapboxRouteLineUtilsTest {
         val expectedExpression = "[step, [line-progress], [rgba, 255.0, 77.0, 77.0, 1.0]" +
             ", 3.0, [rgba, 86.0, 168.0, 251.0, 1.0]]"
 
-        val result = MapboxRouteLineUtils.getVanishingRouteLineExpression(3.0, -45747, -11097861)
+        val result = MapboxRouteLineUtils.getRouteLineExpression(3.0, -45747, -11097861)
 
         assertEquals(expectedExpression, result.toString())
     }
@@ -193,7 +213,7 @@ class MapboxRouteLineUtilsTest {
     @Test
     fun layersAreInitialized() {
         val style = mockk<Style> {
-            every { fullyLoaded } returns true
+            every { isStyleLoaded } returns true
             every { styleSourceExists(RouteConstants.PRIMARY_ROUTE_SOURCE_ID) } returns true
             every { styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID) } returns true
             every { styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID) } returns true
@@ -223,7 +243,7 @@ class MapboxRouteLineUtilsTest {
         val result = MapboxRouteLineUtils.layersAreInitialized(style)
 
         assertTrue(result)
-        verify { style.fullyLoaded }
+        verify { style.isStyleLoaded }
         verify { style.styleSourceExists(RouteConstants.PRIMARY_ROUTE_SOURCE_ID) }
         verify { style.styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID) }
         verify { style.styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID) }
@@ -242,7 +262,7 @@ class MapboxRouteLineUtilsTest {
     fun initializeLayers_whenStyleNotLoaded() {
         val options = MapboxRouteLineOptions.Builder(ctx).build()
         val style = mockk<Style> {
-            every { fullyLoaded } returns false
+            every { isStyleLoaded } returns false
         }
 
         MapboxRouteLineUtils.initializeLayers(style, options)
@@ -255,7 +275,7 @@ class MapboxRouteLineUtilsTest {
         val options = MapboxRouteLineOptions.Builder(ctx).build()
         val style = mockk<Style> {
             every { styleLayers } returns listOf()
-            every { fullyLoaded } returns true
+            every { isStyleLoaded } returns true
             every { styleSourceExists(RouteConstants.PRIMARY_ROUTE_SOURCE_ID) } returns true
             every { styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID) } returns true
             every { styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE2_SOURCE_ID) } returns true
@@ -291,6 +311,12 @@ class MapboxRouteLineUtilsTest {
 
     @Test
     fun initializeLayers() {
+        GeoJsonSource.workerThread =
+            HandlerThread("STYLE_WORKER").apply {
+                priority = Thread.MAX_PRIORITY
+                start()
+            }
+        mockkStatic("com.mapbox.maps.extension.style.layers.LayerUtils")
         val options = MapboxRouteLineOptions.Builder(ctx)
             .withRouteLineBelowLayerId(LocationComponentConstants.MODEL_LAYER)
             .build()
@@ -304,7 +330,7 @@ class MapboxRouteLineUtilsTest {
             every { id } returns LocationComponentConstants.MODEL_LAYER
         }
         val style = mockk<Style> {
-            every { fullyLoaded } returns true
+            every { isStyleLoaded } returns true
             every { styleLayers } returns listOf(mockLayer)
             every { styleSourceExists(RouteConstants.PRIMARY_ROUTE_SOURCE_ID) } returns false
             every { styleSourceExists(RouteConstants.ALTERNATIVE_ROUTE1_SOURCE_ID) } returns false
@@ -567,6 +593,7 @@ class MapboxRouteLineUtilsTest {
             LocationComponentConstants.MODEL_LAYER,
             addStyleLayerPositionSlots[9].below
         )
+        unmockkStatic("com.mapbox.maps.extension.style.layers.LayerUtils")
     }
 
     @Test
@@ -664,7 +691,7 @@ class MapboxRouteLineUtilsTest {
 
     @Test
     fun getRouteLineTrafficExpressionDataWhenUniqueStreetClassDataExists() {
-        val routeAsJsonJson = FileUtils.loadJsonFixture("route-unique-road-classes.json")
+        val routeAsJsonJson = loadJsonFixture("route-unique-road-classes.json")
         val route = DirectionsRoute.fromJson(routeAsJsonJson)
         val distances = route.legs()!!.mapNotNull { it.annotation()!!.distance() }.flatten()
         val distancesSum = distances.subList(0, distances.lastIndex).sum()
@@ -688,6 +715,27 @@ class MapboxRouteLineUtilsTest {
         assertEquals(distancesSum, result.last().distanceFromOrigin, 0.0)
         assertEquals(RouteConstants.LOW_CONGESTION_VALUE, result.last().trafficCongestionIdentifier)
         assertEquals("service", result.last().roadClass)
+    }
+
+    // The route used here for testing produced an erroneous edge case. The
+    // getRouteLineTrafficExpressionData method was always producing a distanceFromOrigin value
+    // of 0.0 for the beginning of each route leg. This could cause an error when creating the
+    // traffic expression because the distanceFromOrigin value is used to determine the
+    // percentage of distance traveled. These values need to be in ascending order to create a
+    // valid line gradient expression. This error won't occur in single leg routes and will
+    // only occur in multileg routes when there is a traffic congestion change at the first point in
+    // the leg. This is because duplicate traffic congestion values are dropped. The route
+    // used in the test below has a traffic change at the first point in the second leg and
+    // the distance annotation is 0.0 which would have caused an error prior to the fix this
+    // test is checking for.
+    @Test
+    fun getRouteLineTrafficExpressionDataMultiLegRouteWithTrafficChangeAtWaypoint() {
+        val route = loadRoute("multileg-route-two-legs.json")
+
+        val trafficExpressionData = MapboxRouteLineUtils.getRouteLineTrafficExpressionData(route)
+
+        assertEquals(1, trafficExpressionData.count { it.distanceFromOrigin == 0.0 })
+        assertEquals(0.0, trafficExpressionData[0].distanceFromOrigin, 0.0)
     }
 
     @Test
@@ -753,7 +801,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf("motorway"),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertTrue(result.all { it.segmentColor == -1 })
@@ -785,7 +834,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf("motorway"),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertEquals(5, result.size)
@@ -826,7 +876,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf("tertiary"),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            true
         )
 
         assertEquals(0.0, result[0].offset, 0.0)
@@ -884,7 +935,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf("street"),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertEquals(-9, result[0].segmentColor)
@@ -917,7 +969,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf(),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertEquals(5, result.size)
@@ -951,7 +1004,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf("motorway"),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertEquals(-2, result[0].segmentColor)
@@ -1019,33 +1073,12 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf("motorway"),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertTrue(result.all { it.segmentColor == -1 })
-        assertEquals(1, result.size)
-    }
-
-    // The route used here for testing produced an erroneous edge case. The
-    // getRouteLineTrafficExpressionData method was always producing a distanceFromOrigin value
-    // of 0.0 for the beginning of each route leg. This could cause an error when creating the
-    // traffic expression because the distanceFromOrigin value is used to determine the
-    // percentage of distance traveled. These values need to be in ascending order to create a
-    // valid line gradient expression. This error won't occur in single leg routes and will
-    // only occur in multileg routes when there is a traffic congestion change at the first point in
-    // the leg. This is because duplicate traffic congestion values are dropped. The route
-    // used in the test below happens to have restricted section overlapping at the first point
-    // of a leg. Since a restriction overrides a traffic congestion value, there is
-    // no duplication so no values are dropped which exposes the bug that this test is intended
-    // to guard against.
-    @Test
-    fun getRouteLineTrafficExpressionDataMultiLegRouteWithTrafficChangeAtWaypoint() {
-        val route = loadRoute("long-multi-leg-route-with-restrictions.json")
-
-        val trafficExpressionData = MapboxRouteLineUtils.getRouteLineTrafficExpressionData(route)
-
-        assertEquals(276, trafficExpressionData.size)
-        assertEquals(360468.8999999996, trafficExpressionData[194].distanceFromOrigin, 0.0)
+        assertEquals(2, result.size)
     }
 
     @Test
@@ -1071,39 +1104,40 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf(),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            true
         )
 
         assertEquals(result[2].segmentColor, -9)
-        assertEquals(result[2].offset, 0.39813638288860653, 0.0)
-        assertEquals(result[3].segmentColor, 2121)
-        assertEquals(result[3].offset, 0.44865144220494346, 0.0)
-        assertEquals(result[4].segmentColor, 0)
-        assertEquals(result[4].offset, 0.45642298979207224, 0.0)
-        assertEquals(result[5].segmentColor, 2121)
-        assertEquals(result[5].offset, 0.464194537379201, 0.0)
-        assertEquals(result[6].segmentColor, 0)
-        assertEquals(result[6].offset, 0.4719660849663298, 0.0)
-        assertEquals(result[7].segmentColor, 2121)
-        assertEquals(result[7].offset, 0.4797376325534585, 0.0)
-        assertEquals(result[8].segmentColor, 0)
-        assertEquals(result[8].offset, 0.4875091801405873, 0.0)
-        assertEquals(result[9].segmentColor, 2121)
-        assertEquals(result[9].offset, 0.4952807277277161, 0.0)
-        assertEquals(result[10].segmentColor, 0)
-        assertEquals(result[10].offset, 0.5030522753148449, 0.0)
-        assertEquals(result[11].segmentColor, 2121)
-        assertEquals(result[11].offset, 0.5108238229019736, 0.0)
-        assertEquals(result[12].segmentColor, 0)
-        assertEquals(result[12].offset, 0.5185953704891023, 0.0)
-        assertEquals(result[13].segmentColor, 2121)
-        assertEquals(result[13].offset, 0.5263669180762311, 0.0)
-        assertEquals(result[14].segmentColor, 0)
-        assertEquals(result[14].offset, 0.5341384656633599, 0.0)
-        assertEquals(result[15].segmentColor, 2121)
-        assertEquals(result[15].offset, 0.5419100132504886, 0.0)
-        assertEquals(result[16].segmentColor, -9)
-        assertEquals(result[16].offset, 0.5429203144368153, 0.0)
+        assertEquals(0.39813638288860653, result[2].offset, 0.0)
+        assertEquals(2121, result[3].segmentColor)
+        assertEquals(0.44865144220494346, result[3].offset, 0.0)
+        assertEquals(0, result[4].segmentColor)
+        assertEquals(0.45642298979207224, result[4].offset, 0.0)
+        assertEquals(2121, result[5].segmentColor)
+        assertEquals(0.464194537379201, result[5].offset, 0.0)
+        assertEquals(0, result[6].segmentColor)
+        assertEquals(0.4765512980427357, result[6].offset, 0.0)
+        assertEquals(2121, result[7].segmentColor)
+        assertEquals(0.4843228456298645, result[7].offset, 0.0)
+        assertEquals(0, result[8].segmentColor)
+        assertEquals(0.4920943932169933, result[8].offset, 0.0)
+        assertEquals(2121, result[9].segmentColor)
+        assertEquals(0.499865940804122, result[9].offset, 0.0)
+        assertEquals(0, result[10].segmentColor)
+        assertEquals(0.5110569693295874, result[10].offset, 0.0)
+        assertEquals(2121, result[11].segmentColor)
+        assertEquals(0.5188285169167162, result[11].offset, 0.0)
+        assertEquals(0, result[12].segmentColor)
+        assertEquals(0.526600064503845, result[12].offset, 0.0)
+        assertEquals(2121, result[13].segmentColor)
+        assertEquals(0.5343716120909737, result[13].offset, 0.0)
+        assertEquals(0, result[14].segmentColor)
+        assertEquals(0.5421431596781024, result[14].offset, 0.0)
+        assertEquals(-9, result[15].segmentColor)
+        assertEquals(0.5429203144368153, result[15].offset, 0.0)
+        assertEquals(-1, result[16].segmentColor)
+        assertEquals(0.5502255691687163, result[16].offset, 0.0)
     }
 
     @Test
@@ -1119,22 +1153,26 @@ class MapboxRouteLineUtilsTest {
             RouteLineTrafficExpressionData(
                 0.0,
                 RouteConstants.LOW_CONGESTION_VALUE,
-                null
+                null,
+                false
             ),
             RouteLineTrafficExpressionData(
                 500.0,
                 RouteConstants.MODERATE_CONGESTION_VALUE,
-                null
+                null,
+                false
             ),
             RouteLineTrafficExpressionData(
                 1000.0,
                 RouteConstants.HEAVY_CONGESTION_VALUE,
-                null
+                null,
+                false
             ),
             RouteLineTrafficExpressionData(
                 1500.0,
-                RouteConstants.RESTRICTED_CONGESTION_VALUE,
-                null
+                RouteConstants.HEAVY_CONGESTION_VALUE,
+                null,
+                true
             )
         )
         val result = MapboxRouteLineUtils.getRouteLineExpressionDataWithStreetClassOverride(
@@ -1143,7 +1181,8 @@ class MapboxRouteLineUtilsTest {
             colorResources,
             true,
             listOf(),
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            true
         )
 
         assertEquals(53, result.size)
@@ -1181,10 +1220,25 @@ class MapboxRouteLineUtilsTest {
         assertEquals(0.0, trafficExpressionData[0].distanceFromOrigin, 0.0)
         assertEquals(512.3, trafficExpressionData[3].distanceFromOrigin, 0.0)
         assertEquals("unknown", trafficExpressionData[3].trafficCongestionIdentifier)
+        assertEquals(false, trafficExpressionData[3].isInRestrictedSection)
         assertEquals(577.3, trafficExpressionData[4].distanceFromOrigin, 0.0)
-        assertEquals("restricted", trafficExpressionData[4].trafficCongestionIdentifier)
-        assertEquals(698.5999999999999, trafficExpressionData[5].distanceFromOrigin, 0.0)
-        assertEquals("unknown", trafficExpressionData[5].trafficCongestionIdentifier)
+        assertEquals("low", trafficExpressionData[4].trafficCongestionIdentifier)
+        assertEquals(true, trafficExpressionData[4].isInRestrictedSection)
+        assertEquals(true, trafficExpressionData[5].isInRestrictedSection)
+        assertEquals(true, trafficExpressionData[6].isInRestrictedSection)
+        assertEquals(698.5999999999999, trafficExpressionData[7].distanceFromOrigin, 0.0)
+        assertEquals("unknown", trafficExpressionData[7].trafficCongestionIdentifier)
+        assertEquals(false, trafficExpressionData[7].isInRestrictedSection)
+    }
+
+    @Test
+    fun getRouteLineTrafficExpressionData_whenFirstDistanceInSecondLegIsZero() {
+        val route = getMultilegWithTwoLegs()
+        val result = MapboxRouteLineUtils.getRouteLineTrafficExpressionData(route)
+
+        assertEquals(20, result.size)
+        assertEquals(478.70000000000005, result[7].distanceFromOrigin, 0.0)
+        assertEquals(478.73487833756155, result[8].distanceFromOrigin, 0.0)
     }
 
     @Test
@@ -1208,7 +1262,8 @@ class MapboxRouteLineUtilsTest {
             listOf(),
             true,
             colorResources,
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            true
         )
 
         assertEquals(2121, result[3].segmentColor)
@@ -1235,10 +1290,11 @@ class MapboxRouteLineUtilsTest {
             listOf(),
             true,
             colorResources,
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
-        assertEquals(19, result.size)
+        assertEquals(20, result.size)
         assertEquals(0.039793906743275334, result[1].offset, 0.0)
         assertEquals(0.9924011283895643, result.last().offset, 0.0)
     }
@@ -1263,7 +1319,8 @@ class MapboxRouteLineUtilsTest {
             listOf(),
             true,
             colorResources,
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertTrue(result[1].offset > .001f)
@@ -1281,12 +1338,34 @@ class MapboxRouteLineUtilsTest {
             listOf(),
             true,
             colorResources,
-            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
         )
 
         assertEquals(1, result.size)
         assertEquals(0.0, result[0].offset, 0.0)
         assertEquals(colorResources.routeDefaultColor, result[0].segmentColor)
+    }
+
+    @Test
+    fun calculateRouteLineSegments_when_styleINactiveRouteLegsIndependently() {
+        val colors = RouteLineColorResources.Builder().build()
+        val route = getMultilegWithTwoLegs()
+
+        val result = MapboxRouteLineUtils.calculateRouteLineSegments(
+            route,
+            listOf(),
+            true,
+            colors,
+            1.0,
+            true
+        )
+
+        result.indexOfFirst { it.legIndex == 1 }
+
+        assertEquals(12, result.size)
+        assertEquals(5, result.indexOfFirst { it.legIndex == 1 })
+        assertEquals(0.48807892461540975, result[5].offset, 0.0)
     }
 
     @Test
@@ -1556,45 +1635,26 @@ class MapboxRouteLineUtilsTest {
 
     @Test
     fun getLayerVisibility() {
-        val layerTypeValue = mockk<Value> {
-            every { contents } returns "line"
-        }
-        val sourceValue = mockk<Value> {
-            every { contents } returns "mapbox-navigation-route-source"
-        }
-        val layerValue = mockk<Value> {
-            every { contents } returns HashMap<String, Value>().also {
-                it["type"] = layerTypeValue
-                it["source"] = sourceValue
-            }
-        }
-        val layerPropertyExpected = mockk<Expected<String, Value>> {
-            every { value.hint(Value::class) } returns layerValue
-        }
-        val stylePropertyValue = mockk<StylePropertyValue> {
-            every { kind } returns StylePropertyValueKind.CONSTANT
-            every { value } returns Value.valueOf("visible")
+        mockkStatic("com.mapbox.maps.extension.style.layers.LayerUtils")
+        val layer = mockk<Layer>(relaxed = true) {
+            every { visibility } returns Visibility.VISIBLE
         }
 
         val style = mockk<Style> {
-            every { isFullyLoaded() } returns true
-            every {
-                getStyleLayerProperties("foobar")
-            } returns layerPropertyExpected
-            every {
-                getStyleLayerProperty("foobar", "visibility")
-            } returns stylePropertyValue
+            every { isStyleLoaded } returns true
+            every { getLayer("foobar") } returns layer
         }
 
         val result = MapboxRouteLineUtils.getLayerVisibility(style, "foobar")
 
         assertEquals(Visibility.VISIBLE, result)
+        unmockkStatic("com.mapbox.maps.extension.style.layers.LayerUtils")
     }
 
     @Test
     fun getLayerVisibility_whenStyleNotLoaded() {
         val style = mockk<Style> {
-            every { isFullyLoaded() } returns false
+            every { isStyleLoaded } returns false
         }
 
         val result = MapboxRouteLineUtils.getLayerVisibility(style, "foobar")
@@ -1604,19 +1664,16 @@ class MapboxRouteLineUtilsTest {
 
     @Test
     fun getLayerVisibility_whenLayerNotFound() {
+        mockkStatic("com.mapbox.maps.extension.style.layers.LayerUtils")
         val style = mockk<Style> {
-            every { isFullyLoaded() } returns true
-            every {
-                getStyleLayerProperties("foobar")
-            } returns mockk {
-                every { value } returns null
-                every { error } returns null
-            }
+            every { isStyleLoaded } returns true
+            every { getLayer("foobar") } returns null
         }
 
         val result = MapboxRouteLineUtils.getLayerVisibility(style, "foobar")
 
         assertNull(result)
+        unmockkStatic("com.mapbox.maps.extension.style.layers.LayerUtils")
     }
 
     @Test
@@ -1633,8 +1690,68 @@ class MapboxRouteLineUtilsTest {
         assertEquals(result.flatList[126].longitude(), result.flatList[127].longitude(), 0.0)
     }
 
+    @Test
+    fun getTrafficLineExpressionProducer() {
+        val routeLineColorResources = RouteLineColorResources.Builder().build()
+        val expectedPrimaryTrafficLineExpression = "[step, [line-progress], " +
+            "[rgba, 0.0, 0.0, 0.0, 0.0], 0.0, [rgba, 86.0, 168.0, 251.0, 1.0], " +
+            "0.9429639111009005, [rgba, 255.0, 149.0, 0.0, 1.0]]"
+        val route = loadRoute("short_route.json")
+
+        val result = MapboxRouteLineUtils.getTrafficLineExpressionProducer(
+            route,
+            listOf(),
+            routeLineColorResources,
+            true,
+            0.0,
+            Color.TRANSPARENT,
+            routeLineColorResources.routeUnknownTrafficColor,
+            0.0
+        ).invoke()
+
+        assertEquals(
+            expectedPrimaryTrafficLineExpression,
+            result.toString()
+        )
+    }
+
+    @Test
+    fun getRouteLineExpression() {
+        val expectedExpression = "[step, [line-progress], [rgba, 255.0, 0.0, 0.0, 1.0], 0.2," +
+            " [rgba, 86.0, 168.0, 251.0, 1.0], 0.48807892461540975, " +
+            "[rgba, 255.0, 255.0, 0.0, 1.0]]"
+        val colorResources = RouteLineColorResources.Builder()
+            .inActiveRouteLegsColor(Color.YELLOW)
+            .build()
+        val route = getMultilegWithTwoLegs()
+        val segments = MapboxRouteLineUtils.calculateRouteLineSegments(
+            route,
+            listOf(),
+            true,
+            colorResources,
+            RouteConstants.RESTRICTED_ROAD_SECTION_SCALE,
+            false
+        )
+
+        val result = MapboxRouteLineUtils.getRouteLineExpression(
+            .20,
+            segments,
+            Color.RED,
+            colorResources.routeDefaultColor,
+            colorResources.inActiveRouteLegsColor,
+            0
+        )
+
+        assertEquals(expectedExpression, result.toString())
+    }
+
     private fun getMultilegRoute(): DirectionsRoute {
         return loadRoute("multileg_route.json")
+    }
+
+    private fun getMultilegWithTwoLegs(): DirectionsRoute {
+        val routeAsJson = loadJsonFixture("multileg-route-two-legs.json")
+        return DirectionsRoute.fromJson(routeAsJson)
     }
 
     private fun loadRoute(routeFileName: String): DirectionsRoute {

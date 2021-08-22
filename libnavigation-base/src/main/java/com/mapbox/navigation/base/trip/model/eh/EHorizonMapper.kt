@@ -2,6 +2,7 @@ package com.mapbox.navigation.base.trip.model.eh
 
 import com.mapbox.navigation.base.trip.model.roadobject.RoadObjectPosition
 import com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.GantryDistanceInfo
+import com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.Gate
 import com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.LineDistanceInfo
 import com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.PointDistanceInfo
 import com.mapbox.navigation.base.trip.model.roadobject.distanceinfo.PolygonDistanceInfo
@@ -14,6 +15,7 @@ import com.mapbox.navigation.base.trip.model.roadobject.location.PolygonLocation
 import com.mapbox.navigation.base.trip.model.roadobject.location.PolylineLocation
 import com.mapbox.navigation.base.trip.model.roadobject.location.RoadObjectLocation
 import com.mapbox.navigation.base.trip.model.roadobject.location.RouteAlertLocation
+import com.mapbox.navigation.base.trip.model.roadobject.location.SubgraphLocation
 import com.mapbox.navigator.EdgeMetadata
 import com.mapbox.navigator.ElectronicHorizon
 import com.mapbox.navigator.ElectronicHorizonEdge
@@ -33,6 +35,8 @@ import com.mapbox.navigator.RoadObjectEnterExitInfo
 import com.mapbox.navigator.RoadObjectPassInfo
 import com.mapbox.navigator.RoadObjectProvider
 import com.mapbox.navigator.RoadObjectType
+import com.mapbox.navigator.RoadSurface
+import com.mapbox.navigator.SubgraphEdge
 
 private typealias SDKRoadObjectType =
     com.mapbox.navigation.base.trip.model.roadobject.RoadObjectType
@@ -57,6 +61,12 @@ internal typealias SDKOpenLRSideOfRoad =
 
 internal typealias SDKOpenLROrientation =
     com.mapbox.navigation.base.trip.model.roadobject.location.OpenLROrientation
+
+internal typealias SDKRoadSurface =
+    com.mapbox.navigation.base.trip.model.eh.RoadSurface
+
+internal typealias SDKSubgraphEdge =
+    com.mapbox.navigation.base.trip.model.roadobject.location.SubgraphEdge
 
 /**
  * Map the ElectronicHorizonPosition.
@@ -128,20 +138,24 @@ internal fun RoadObjectDistanceInfo.mapToRoadObjectDistanceInfo(
             pointDistanceInfo.distance
         )
         isPolygonDistanceInfo -> with(polygonDistanceInfo) {
+            val entrances = mapToGates(entrances)
+            val exits = mapToGates(exits)
             PolygonDistanceInfo(
                 roadObjectId,
                 roadObjectType,
-                distanceToNearestEntry,
-                distanceToNearestExit,
+                entrances,
+                exits,
                 inside,
             )
         }
         isSubGraphDistanceInfo -> with(subGraphDistanceInfo) {
+            val entrances = mapToGates(entrances)
+            val exits = mapToGates(exits)
             SubGraphDistanceInfo(
                 roadObjectId,
                 roadObjectType,
-                distanceToNearestEntry,
-                distanceToNearestExit,
+                entrances,
+                exits,
                 inside,
             )
         }
@@ -191,6 +205,14 @@ internal fun MatchedRoadObjectLocation.mapToRoadObjectLocation(): RoadObjectLoca
         isRouteAlertLocation -> {
             RouteAlertLocation(routeAlertLocation.shape)
         }
+        isMatchedSubgraphLocation -> {
+            SubgraphLocation(
+                matchedSubgraphLocation.enters.mapToRoadObjectPositions(),
+                matchedSubgraphLocation.exits.mapToRoadObjectPositions(),
+                matchedSubgraphLocation.edges.mapToSubgraphEdges(),
+                matchedSubgraphLocation.shape
+            )
+        }
         else -> throw IllegalArgumentException("Unsupported object location type.")
     }
 }
@@ -204,6 +226,24 @@ internal fun Position.mapToRoadObjectPosition(): RoadObjectPosition {
         coordinate
     )
 }
+
+internal fun Map<Long, SubgraphEdge>.mapToSubgraphEdges(): Map<Long, SDKSubgraphEdge> {
+    val edges = mutableMapOf<Long, SDKSubgraphEdge>()
+    this.forEach {
+        edges[it.key] = it.value.mapToSubgraphEdge()
+    }
+
+    return edges
+}
+
+internal fun SubgraphEdge.mapToSubgraphEdge() =
+    SDKSubgraphEdge(
+        id,
+        innerEdgeIds,
+        outerEdgeIds,
+        shape,
+        length
+    )
 
 /**
  * Map the RoadObjectType.
@@ -284,6 +324,7 @@ internal fun EdgeMetadata.mapToEHorizonEdgeMetadata(): EHorizonEdgeMetadata {
         stateCode,
         isRightHandTraffic,
         isOneway,
+        surface.mapToRoadSurface()
     )
 }
 
@@ -399,3 +440,28 @@ private fun GraphPath.mapToEHorizonGraphPath(): EHorizonGraphPath {
         length
     )
 }
+
+private fun mapToGates(gates: List<com.mapbox.navigator.Gate>): List<Gate> {
+    return gates.map { it.mapToGate() }.toList()
+}
+
+private fun com.mapbox.navigator.Gate.mapToGate(): Gate {
+    return Gate(
+        id,
+        position.mapToRoadObjectPosition(),
+        probability,
+        distance
+    )
+}
+
+private fun RoadSurface.mapToRoadSurface(): String =
+    when (this) {
+        RoadSurface.PAVED_SMOOTH -> SDKRoadSurface.PAVED_SMOOTH
+        RoadSurface.PAVED -> SDKRoadSurface.PAVED
+        RoadSurface.PAVED_ROUGH -> SDKRoadSurface.PAVED_ROUGH
+        RoadSurface.COMPACTED -> SDKRoadSurface.COMPACTED
+        RoadSurface.DIRT -> SDKRoadSurface.DIRT
+        RoadSurface.GRAVEL -> SDKRoadSurface.GRAVEL
+        RoadSurface.PATH -> SDKRoadSurface.PATH
+        RoadSurface.IMPASSABLE -> SDKRoadSurface.IMPASSABLE
+    }

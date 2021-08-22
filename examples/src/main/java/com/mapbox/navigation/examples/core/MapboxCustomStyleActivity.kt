@@ -3,9 +3,9 @@ package com.mapbox.navigation.examples.core
 import android.annotation.SuppressLint
 import android.location.Location
 import android.os.Bundle
-import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.models.DirectionsRoute
@@ -25,23 +25,21 @@ import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.formatter.DistanceFormatterOptions
 import com.mapbox.navigation.base.options.NavigationOptions
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesObserver
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
-import com.mapbox.navigation.core.internal.formatter.MapboxDistanceFormatter
+import com.mapbox.navigation.core.formatter.MapboxDistanceFormatter
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
 import com.mapbox.navigation.core.replay.route.ReplayRouteMapper
-import com.mapbox.navigation.core.trip.session.BannerInstructionsObserver
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.MapMatcherResultObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.examples.core.databinding.LayoutActivityStyleBinding
-import com.mapbox.navigation.ui.maneuver.api.ManeuverCallback
 import com.mapbox.navigation.ui.maneuver.api.MapboxManeuverApi
-import com.mapbox.navigation.ui.maneuver.api.StepDistanceRemainingCallback
-import com.mapbox.navigation.ui.maneuver.api.UpcomingManeuverListCallback
 import com.mapbox.navigation.ui.maps.internal.route.line.MapboxRouteLineApiExtensions.setRoutes
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
 import com.mapbox.navigation.ui.maps.route.arrow.api.MapboxRouteArrowApi
@@ -64,7 +62,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Collections
-import java.util.Objects
 
 class MapboxCustomStyleActivity : AppCompatActivity(), OnMapLongClickListener {
 
@@ -133,25 +130,6 @@ class MapboxCustomStyleActivity : AppCompatActivity(), OnMapLongClickListener {
         MapboxRouteArrowView(RouteArrowOptions.Builder(this).build())
     }
 
-    private val currentManeuverCallback = ManeuverCallback { maneuver ->
-        if (binding.maneuverView.visibility != View.VISIBLE) {
-            binding.maneuverView.visibility = View.VISIBLE
-        }
-        binding.maneuverView.renderManeuver(maneuver)
-    }
-
-    private val stepDistanceRemainingCallback = StepDistanceRemainingCallback { distanceRemaining ->
-        distanceRemaining.onValue {
-            binding.maneuverView.renderDistanceRemaining(it)
-        }
-    }
-
-    private val upcomingManeuversCallback = UpcomingManeuverListCallback { maneuvers ->
-        maneuvers.onValue {
-            binding.maneuverView.renderUpcomingManeuvers(it)
-        }
-    }
-
     private val replayProgressObserver = ReplayProgressObserver(mapboxReplayer)
 
     private val locationObserver = object : LocationObserver {
@@ -191,19 +169,20 @@ class MapboxCustomStyleActivity : AppCompatActivity(), OnMapLongClickListener {
         tripProgressApiApi.getTripProgress(routeProgress).let { update ->
             binding.tripProgressView.render(update)
         }
-        maneuverApi.getUpcomingManeuverList(routeProgress, upcomingManeuversCallback)
-        ifNonNull(routeProgress.currentLegProgress) { legProgress ->
-            ifNonNull(legProgress.currentStepProgress) {
-                maneuverApi.getStepDistanceRemaining(it, stepDistanceRemainingCallback)
-            }
-        }
-    }
 
-    private val bannerInstructionsObserver = BannerInstructionsObserver { bannerInstructions ->
-        maneuverApi.getManeuver(
-            bannerInstructions,
-            currentManeuverCallback
-        )
+        val maneuvers = maneuverApi.getManeuvers(routeProgress)
+
+        if (binding.maneuverView.visibility != VISIBLE) {
+            binding.maneuverView.visibility = VISIBLE
+        }
+        maneuvers.onError { error ->
+            Toast.makeText(
+                this@MapboxCustomStyleActivity,
+                error.errorMessage,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        binding.maneuverView.renderManeuvers(maneuvers)
     }
 
     private val mapMatcherObserver = MapMatcherResultObserver { mapMatcherResult ->
@@ -253,24 +232,26 @@ class MapboxCustomStyleActivity : AppCompatActivity(), OnMapLongClickListener {
             RouteOptions.builder()
                 .applyDefaultNavigationOptions()
                 .applyLanguageAndVoiceUnitOptions(this)
-                .accessToken(Objects.requireNonNull<String>(getMapboxAccessTokenFromResources()))
-                .coordinates(listOf(origin, destination))
+                .coordinatesList(listOf(origin, destination))
                 .alternatives(false)
                 .annotationsList(Collections.singletonList(DirectionsCriteria.ANNOTATION_MAXSPEED))
                 .build(),
-            object : RoutesRequestCallback {
-                override fun onRoutesReady(routes: List<DirectionsRoute>) {
+            object : RouterCallback {
+                override fun onRoutesReady(
+                    routes: List<DirectionsRoute>,
+                    routerOrigin: RouterOrigin
+                ) {
                     mapboxNavigation.setRoutes(routes)
                 }
 
-                override fun onRoutesRequestFailure(
-                    throwable: Throwable,
+                override fun onFailure(
+                    reasons: List<RouterFailure>,
                     routeOptions: RouteOptions
                 ) {
                     // no impl
                 }
 
-                override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                     // no impl
                 }
             }
@@ -317,7 +298,6 @@ class MapboxCustomStyleActivity : AppCompatActivity(), OnMapLongClickListener {
             mapboxNavigation.registerMapMatcherResultObserver(mapMatcherObserver)
             mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
             mapboxNavigation.registerRouteProgressObserver(replayProgressObserver)
-            mapboxNavigation.registerBannerInstructionsObserver(bannerInstructionsObserver)
         }
     }
 
@@ -329,7 +309,6 @@ class MapboxCustomStyleActivity : AppCompatActivity(), OnMapLongClickListener {
             mapboxNavigation.unregisterMapMatcherResultObserver(mapMatcherObserver)
             mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
             mapboxNavigation.unregisterRouteProgressObserver(replayProgressObserver)
-            mapboxNavigation.unregisterBannerInstructionsObserver(bannerInstructionsObserver)
         }
         binding.mapView.onStop()
     }

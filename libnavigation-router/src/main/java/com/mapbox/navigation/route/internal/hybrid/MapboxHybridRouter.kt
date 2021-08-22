@@ -5,16 +5,17 @@ import com.mapbox.annotation.module.MapboxModule
 import com.mapbox.annotation.module.MapboxModuleType
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.base.common.logger.Logger
 import com.mapbox.navigation.base.internal.accounts.UrlSkuTokenProvider
 import com.mapbox.navigation.base.route.RouteRefreshCallback
 import com.mapbox.navigation.base.route.RouteRefreshError
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.navigator.internal.MapboxNativeNavigator
 import com.mapbox.navigation.route.internal.offboard.MapboxOffboardRouter
 import com.mapbox.navigation.route.internal.onboard.MapboxOnboardRouter
-import com.mapbox.navigation.utils.internal.NetworkStatus
-import com.mapbox.navigation.utils.internal.NetworkStatusService
+import com.mapbox.navigation.utils.internal.ConnectivityHandler
 import com.mapbox.navigation.utils.internal.RequestMap
 import com.mapbox.navigation.utils.internal.ThreadController
 import com.mapbox.navigation.utils.internal.monitorChannelWithException
@@ -31,8 +32,7 @@ import kotlinx.coroutines.Job
 class MapboxHybridRouter(
     private val onboardRouter: Router,
     private val offboardRouter: Router,
-    networkStatusService: NetworkStatusService,
-    private val logger: Logger
+    networkStatusService: ConnectivityHandler,
 ) : Router {
 
     private val directionRequests = RequestMap<HybridRouterHandler.Directions>()
@@ -43,24 +43,19 @@ class MapboxHybridRouter(
         context: Context,
         urlSkuTokenProvider: UrlSkuTokenProvider,
         navigatorNative: MapboxNativeNavigator,
-        logger: Logger,
-        networkStatusService: NetworkStatusService,
-        refreshEnabled: Boolean
+        networkStatusService: ConnectivityHandler
     ) : this(
         onboardRouter = MapboxOnboardRouter(
+            accessToken,
             navigatorNative,
-            context,
-            logger
+            context
         ),
         offboardRouter = MapboxOffboardRouter(
             accessToken,
             context,
-            urlSkuTokenProvider,
-            refreshEnabled,
-            logger
+            urlSkuTokenProvider
         ),
-        networkStatusService = networkStatusService,
-        logger = logger
+        networkStatusService = networkStatusService
     )
 
     private val jobControl = ThreadController.getIOScopeAndRootJob()
@@ -74,13 +69,12 @@ class MapboxHybridRouter(
     init {
         networkStatusJob = jobControl.scope.monitorChannelWithException(
             networkStatusService.getNetworkStatusChannel(),
-            ::onNetworkStatusChanged,
-            networkStatusService::cleanup
+            ::onNetworkStatusChanged
         )
     }
 
-    internal suspend fun onNetworkStatusChanged(networkStatus: NetworkStatus) {
-        isNetworkAvailable = networkStatus.isNetworkAvailable
+    internal suspend fun onNetworkStatusChanged(status: Boolean) {
+        isNetworkAvailable = status
     }
 
     /**
@@ -91,26 +85,29 @@ class MapboxHybridRouter(
      */
     override fun getRoute(
         routeOptions: RouteOptions,
-        callback: Router.Callback
+        callback: RouterCallback
     ): Long {
         val routerHandler = createDirectionsHandler()
         val id = directionRequests.put(routerHandler)
         routerHandler.getRoute(
             routeOptions,
-            object : Router.Callback {
-                override fun onResponse(routes: List<DirectionsRoute>) {
+            object : RouterCallback {
+                override fun onRoutesReady(
+                    routes: List<DirectionsRoute>,
+                    routerOrigin: RouterOrigin
+                ) {
                     directionRequests.remove(id)
-                    callback.onResponse(routes)
+                    callback.onRoutesReady(routes, routerOrigin)
                 }
 
-                override fun onFailure(throwable: Throwable) {
+                override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                     directionRequests.remove(id)
-                    callback.onFailure(throwable)
+                    callback.onFailure(reasons, routeOptions)
                 }
 
-                override fun onCanceled() {
+                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: RouterOrigin) {
                     directionRequests.remove(id)
-                    callback.onCanceled()
+                    callback.onCanceled(routeOptions, routerOrigin)
                 }
             }
         )
@@ -182,17 +179,17 @@ class MapboxHybridRouter(
 
     private fun createDirectionsHandler(): HybridRouterHandler.Directions {
         return if (isNetworkAvailable) {
-            HybridRouterHandler.Directions(offboardRouter, onboardRouter, logger)
+            HybridRouterHandler.Directions(offboardRouter, onboardRouter)
         } else {
-            HybridRouterHandler.Directions(onboardRouter, offboardRouter, logger)
+            HybridRouterHandler.Directions(onboardRouter, offboardRouter)
         }
     }
 
     private fun createRefreshHandler(): HybridRouterHandler.Refresh {
         return if (isNetworkAvailable) {
-            HybridRouterHandler.Refresh(offboardRouter, onboardRouter, logger)
+            HybridRouterHandler.Refresh(offboardRouter, onboardRouter)
         } else {
-            HybridRouterHandler.Refresh(onboardRouter, offboardRouter, logger)
+            HybridRouterHandler.Refresh(onboardRouter, offboardRouter)
         }
     }
 }

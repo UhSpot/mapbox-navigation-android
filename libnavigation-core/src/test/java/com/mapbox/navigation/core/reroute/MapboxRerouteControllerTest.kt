@@ -3,8 +3,9 @@ package com.mapbox.navigation.core.reroute
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.base.common.logger.Logger
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.directions.session.DirectionsSession
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.routeoptions.RouteOptionsUpdater
 import com.mapbox.navigation.core.trip.session.TripSession
 import com.mapbox.navigation.testing.MainCoroutineRule
@@ -99,7 +100,7 @@ class MapboxRerouteControllerTest {
     @Test
     fun reroute_get_from_inputs() {
         mockRouteOptionsResult(successFromResult)
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -108,7 +109,7 @@ class MapboxRerouteControllerTest {
         } returns 1L
 
         rerouteController.reroute(routeCallback)
-        routeRequestCallback.captured.onRoutesReady(mockk())
+        routeRequestCallback.captured.onRoutesReady(mockk(), mockk())
 
         verify(exactly = 1) {
             tripSession.getEnhancedLocation()
@@ -126,7 +127,8 @@ class MapboxRerouteControllerTest {
         mockRouteOptionsResult(successFromResult)
         addRerouteStateObserver()
         val routes = listOf(mockk<DirectionsRoute>())
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val origin = mockk<RouterOrigin>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -135,14 +137,14 @@ class MapboxRerouteControllerTest {
         } returns 1L
 
         rerouteController.reroute(routeCallback)
-        routeRequestCallback.captured.onRoutesReady(routes)
+        routeRequestCallback.captured.onRoutesReady(routes, origin)
 
         verify(exactly = 1) { routeCallback.onNewRoutes(routes) }
         verify(exactly = 1) {
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.FetchingRoute)
         }
         verify(exactly = 1) {
-            primaryRerouteObserver.onRerouteStateChanged(RerouteState.RouteFetched)
+            primaryRerouteObserver.onRerouteStateChanged(RerouteState.RouteFetched(origin))
         }
         verify(exactly = 2) {
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.Idle)
@@ -150,7 +152,7 @@ class MapboxRerouteControllerTest {
         verifyOrder {
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.Idle)
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.FetchingRoute)
-            primaryRerouteObserver.onRerouteStateChanged(RerouteState.RouteFetched)
+            primaryRerouteObserver.onRerouteStateChanged(RerouteState.RouteFetched(origin))
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.Idle)
         }
     }
@@ -159,7 +161,7 @@ class MapboxRerouteControllerTest {
     fun reroute_unsuccess() {
         addRerouteStateObserver()
         mockRouteOptionsResult(successFromResult)
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -168,7 +170,7 @@ class MapboxRerouteControllerTest {
         } returns 1L
 
         rerouteController.reroute(routeCallback)
-        routeRequestCallback.captured.onRoutesRequestFailure(mockk(), mockk())
+        routeRequestCallback.captured.onFailure(mockk(), mockk())
 
         verify(exactly = 1) {
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.FetchingRoute)
@@ -191,7 +193,7 @@ class MapboxRerouteControllerTest {
     fun reroute_request_canceled_external() {
         mockRouteOptionsResult(successFromResult)
         addRerouteStateObserver()
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -200,7 +202,7 @@ class MapboxRerouteControllerTest {
         } returns 1L
 
         rerouteController.reroute(routeCallback)
-        routeRequestCallback.captured.onRoutesRequestCanceled(mockk())
+        routeRequestCallback.captured.onCanceled(mockk(), mockk())
 
         verify(exactly = 1) {
             primaryRerouteObserver.onRerouteStateChanged(RerouteState.FetchingRoute)
@@ -222,7 +224,7 @@ class MapboxRerouteControllerTest {
     @Test
     fun reroute_calls_interrupt_if_currently_fetching() {
         mockRouteOptionsResult(successFromResult)
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -232,7 +234,7 @@ class MapboxRerouteControllerTest {
         rerouteController.reroute(routeCallback)
 
         rerouteController.reroute(routeCallback)
-        routeRequestCallback.captured.onRoutesReady(mockk())
+        routeRequestCallback.captured.onRoutesReady(mockk(), mockk())
 
         verify(exactly = 1) { directionsSession.cancelRouteRequest(1L) }
     }
@@ -240,7 +242,7 @@ class MapboxRerouteControllerTest {
     @Test
     fun reroute_only_calls_interrupt_if_currently_fetching() {
         mockRouteOptionsResult(successFromResult)
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -249,7 +251,7 @@ class MapboxRerouteControllerTest {
         } returns 1L
 
         rerouteController.reroute(routeCallback)
-        routeRequestCallback.captured.onRoutesReady(mockk())
+        routeRequestCallback.captured.onRoutesReady(mockk(), mockk())
 
         verify(exactly = 0) { directionsSession.cancelAll() }
         verify(exactly = 0) { directionsSession.cancelRouteRequest(any()) }
@@ -259,7 +261,7 @@ class MapboxRerouteControllerTest {
     fun interrupt_route_request() {
         mockRouteOptionsResult(successFromResult)
         addRerouteStateObserver()
-        val routeRequestCallback = slot<RoutesRequestCallback>()
+        val routeRequestCallback = slot<RouterCallback>()
         every {
             directionsSession.requestRoutes(
                 routeOptionsFromSuccessResult,
@@ -269,7 +271,7 @@ class MapboxRerouteControllerTest {
         every {
             directionsSession.cancelRouteRequest(1L)
         } answers {
-            routeRequestCallback.captured.onRoutesRequestCanceled(mockk())
+            routeRequestCallback.captured.onCanceled(mockk(), mockk())
         }
 
         rerouteController.reroute(routeCallback)

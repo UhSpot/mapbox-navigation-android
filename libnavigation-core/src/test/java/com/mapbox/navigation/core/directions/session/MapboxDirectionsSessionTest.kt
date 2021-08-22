@@ -2,10 +2,12 @@ package com.mapbox.navigation.core.directions.session
 
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.base.common.logger.Logger
 import com.mapbox.navigation.base.route.RouteRefreshCallback
 import com.mapbox.navigation.base.route.RouteRefreshError
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
+import com.mapbox.navigation.base.route.RouterFailure
+import com.mapbox.navigation.base.route.RouterOrigin
 import com.mapbox.navigation.core.NavigationComponentProvider
 import io.mockk.every
 import io.mockk.mockk
@@ -22,14 +24,13 @@ class MapboxDirectionsSessionTest {
     private lateinit var session: MapboxDirectionsSession
 
     private val router: Router = mockk(relaxUnitFun = true)
-    private val logger: Logger = mockk(relaxUnitFun = true)
     private val routeOptions: RouteOptions = mockk(relaxUnitFun = true)
-    private val routesRequestCallback: RoutesRequestCallback = mockk(relaxUnitFun = true)
+    private val routerCallback: RouterCallback = mockk(relaxUnitFun = true)
     private val routesRefreshRequestCallback: RouteRefreshCallback = mockk(relaxUnitFun = true)
     private val observer: RoutesObserver = mockk(relaxUnitFun = true)
     private val route: DirectionsRoute = mockk(relaxUnitFun = true)
     private val routes: List<DirectionsRoute> = listOf(route)
-    private lateinit var routeCallback: Router.Callback
+    private lateinit var routeCallback: RouterCallback
     private lateinit var refreshCallback: RouteRefreshCallback
 
     private val routeRequestId = 1L
@@ -51,7 +52,7 @@ class MapboxDirectionsSessionTest {
         every { routeBuilder.routeOptions(any()) } returns routeBuilder
         every { routeBuilder.build() } returns route
 
-        val routeListener = slot<Router.Callback>()
+        val routeListener = slot<RouterCallback>()
         val refreshListener = slot<RouteRefreshCallback>()
         every { router.getRoute(routeOptions, capture(routeListener)) } answers {
             routeCallback = routeListener.captured
@@ -63,10 +64,10 @@ class MapboxDirectionsSessionTest {
         }
         every { routes[0].routeOptions() } returns routeOptions
         mockkObject(NavigationComponentProvider)
-        every { routesRequestCallback.onRoutesReady(any()) } answers {
+        every { routerCallback.onRoutesReady(any(), any()) } answers {
             this.value
         }
-        session = MapboxDirectionsSession(router, logger)
+        session = MapboxDirectionsSession(router)
     }
 
     @Test
@@ -77,38 +78,40 @@ class MapboxDirectionsSessionTest {
 
     @Test
     fun `route response - success`() {
-        session.requestRoutes(routeOptions, routesRequestCallback)
-        routeCallback.onResponse(routes)
+        val mockOrigin = mockk<RouterOrigin>()
+        session.requestRoutes(routeOptions, routerCallback)
+        routeCallback.onRoutesReady(routes, mockOrigin)
 
-        verify(exactly = 1) { routesRequestCallback.onRoutesReady(routes) }
+        verify(exactly = 1) { routerCallback.onRoutesReady(routes, mockOrigin) }
     }
 
     @Test
     fun `route request returns id`() {
         assertEquals(
             1L,
-            session.requestRoutes(routeOptions, routesRequestCallback)
+            session.requestRoutes(routeOptions, routerCallback)
         )
     }
 
     @Test
     fun `route response - failure`() {
-        val throwable: Throwable = mockk()
-        session.requestRoutes(routeOptions, routesRequestCallback)
-        routeCallback.onFailure(throwable)
+        val reasons: List<RouterFailure> = listOf(mockk())
+        session.requestRoutes(routeOptions, routerCallback)
+        routeCallback.onFailure(reasons, routeOptions)
 
         verify(exactly = 1) {
-            routesRequestCallback.onRoutesRequestFailure(throwable, routeOptions)
+            routerCallback.onFailure(reasons, routeOptions)
         }
     }
 
     @Test
     fun `route response - canceled`() {
-        session.requestRoutes(routeOptions, routesRequestCallback)
-        routeCallback.onCanceled()
+        val mockOrigin = mockk<RouterOrigin>()
+        session.requestRoutes(routeOptions, routerCallback)
+        routeCallback.onCanceled(routeOptions, mockOrigin)
 
         verify(exactly = 1) {
-            routesRequestCallback.onRoutesRequestCanceled(routeOptions)
+            routerCallback.onCanceled(routeOptions, mockOrigin)
         }
     }
 
@@ -196,7 +199,7 @@ class MapboxDirectionsSessionTest {
 
     @Test
     fun `setting a route does not impact ongoing route request`() {
-        session.requestRoutes(routeOptions, routesRequestCallback)
+        session.requestRoutes(routeOptions, routerCallback)
         session.routes = routes
         verify(exactly = 0) { router.cancelAll() }
     }

@@ -31,8 +31,9 @@ import com.mapbox.maps.MapboxMap;
 import com.mapbox.maps.Style;
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility;
 import com.mapbox.maps.plugin.LocationPuck2D;
+import com.mapbox.maps.plugin.Plugin;
 import com.mapbox.maps.plugin.animation.CameraAnimationsPlugin;
-import com.mapbox.maps.plugin.animation.CameraAnimationsPluginImplKt;
+import com.mapbox.maps.plugin.animation.CameraAnimationsUtils;
 import com.mapbox.maps.plugin.animation.MapAnimationOptions;
 import com.mapbox.maps.plugin.gestures.GesturesPluginImpl;
 import com.mapbox.maps.plugin.gestures.OnMapClickListener;
@@ -42,11 +43,14 @@ import com.mapbox.maps.plugin.locationcomponent.LocationComponentPluginImpl;
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener;
 import com.mapbox.navigation.base.extensions.RouteOptionsExtensions;
 import com.mapbox.navigation.base.options.NavigationOptions;
+import com.mapbox.navigation.base.options.PredictiveCacheLocationOptions;
 import com.mapbox.navigation.base.options.RoutingTilesOptions;
+import com.mapbox.navigation.base.route.RouterCallback;
+import com.mapbox.navigation.base.route.RouterFailure;
+import com.mapbox.navigation.base.route.RouterOrigin;
 import com.mapbox.navigation.base.trip.model.RouteProgress;
 import com.mapbox.navigation.core.MapboxNavigation;
 import com.mapbox.navigation.core.directions.session.RoutesObserver;
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback;
 import com.mapbox.navigation.core.replay.MapboxReplayer;
 import com.mapbox.navigation.core.replay.ReplayLocationEngine;
 import com.mapbox.navigation.core.replay.history.ReplayEventBase;
@@ -73,8 +77,7 @@ import com.mapbox.navigation.ui.maps.route.line.model.RouteLine;
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineError;
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineResources;
 import com.mapbox.navigation.ui.maps.route.line.model.RouteNotFound;
-import com.mapbox.navigation.ui.maps.route.line.model.RouteSetValue;
-import com.mapbox.navigation.ui.maps.route.line.model.VanishingRouteLineUpdateValue;
+import com.mapbox.navigation.ui.maps.route.line.model.RouteLineUpdateValue;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -140,7 +143,12 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
     navigationLocationProvider = new NavigationLocationProvider();
     locationComponent = getLocationComponent();
     locationComponent.setLocationPuck(
-        new LocationPuck2D(null, ContextCompat.getDrawable(this, R.drawable.mapbox_navigation_puck_icon), null, null)
+        new LocationPuck2D(
+            null,
+            ContextCompat.getDrawable(this, R.drawable.mapbox_navigation_puck_icon),
+            null,
+            null
+        )
     );
     locationComponent.setLocationProvider(navigationLocationProvider);
     locationComponent.setEnabled(true);
@@ -169,10 +177,12 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
         .build();
     routeArrowView = new MapboxRouteArrowView(routeArrowOptions);
 
-    predictiveCacheController = new PredictiveCacheController(mapboxNavigation, message -> {
-      Log.e(TAG, "predictive cache error: " + message);
-    });
-    predictiveCacheController.setMapInstance(mapboxMap);
+    predictiveCacheController = new PredictiveCacheController(
+        new PredictiveCacheLocationOptions.Builder().build(),
+        message -> {
+          Log.e(TAG, "predictive cache error: " + message);
+        });
+    predictiveCacheController.createMapControllers(mapboxMap);
   }
 
   @SuppressLint("MissingPermission")
@@ -188,7 +198,7 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
     ((FloatingActionButton) findViewById(R.id.fabToggleStyle)).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
-        if (mapboxMap.getStyle() == null || !mapboxMap.getStyle().isFullyLoaded()) {
+        if (mapboxMap.getStyle() == null || !mapboxMap.getStyle().isStyleLoaded()) {
           return;
         }
 
@@ -323,8 +333,7 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
     RouteOptionsExtensions.applyDefaultNavigationOptions(builder);
     RouteOptionsExtensions.applyLanguageAndVoiceUnitOptions(builder, this);
     RouteOptions routeOptions = builder
-        .accessToken(getMapboxAccessTokenFromResources())
-        .coordinates(Arrays.asList(origin, destination))
+        .coordinatesList(Arrays.asList(origin, destination))
         .alternatives(true)
         .build();
 
@@ -334,9 +343,11 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
     );
   }
 
-  private RoutesRequestCallback routesReqCallback = new RoutesRequestCallback() {
+  private RouterCallback routesReqCallback = new RouterCallback() {
     @Override
-    public void onRoutesReady(@NotNull List<? extends DirectionsRoute> routes) {
+    public void onRoutesReady(
+        @NotNull List<? extends DirectionsRoute> routes, @NonNull RouterOrigin routerOrigin
+    ) {
       mapboxNavigation.setRoutes(routes);
       if (!routes.isEmpty()) {
         routeLoading.setVisibility(View.INVISIBLE);
@@ -345,15 +356,15 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
     }
 
     @Override
-    public void onRoutesRequestFailure(@NotNull Throwable throwable, @NotNull RouteOptions routeOptions) {
-      Log.e(TAG, "route request failure " + throwable.toString());
+    public void onFailure(@NonNull List<RouterFailure> reasons, @NonNull RouteOptions routeOptions) {
       routeLoading.setVisibility(View.INVISIBLE);
     }
 
     @Override
-    public void onRoutesRequestCanceled(@NotNull RouteOptions routeOptions) {
+    public void onCanceled(@NonNull RouteOptions routeOptions, @NonNull RouterOrigin routerOrigin) {
       Log.d(TAG, "route request canceled");
       routeLoading.setVisibility(View.INVISIBLE);
+
     }
   };
 
@@ -423,23 +434,23 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
   }
 
   private LocationComponentPluginImpl getLocationComponent() {
-    return mapView.getPlugin(LocationComponentPluginImpl.class);
+    return mapView.getPlugin(Plugin.MAPBOX_LOCATION_COMPONENT_PLUGIN_ID);
   }
 
   private CameraAnimationsPlugin getMapCamera() {
-    return CameraAnimationsPluginImplKt.getCamera(mapView);
+    return CameraAnimationsUtils.getCamera(mapView);
   }
 
   private GesturesPluginImpl getGesturePlugin() {
-    return mapView.getPlugin(GesturesPluginImpl.class);
+    return mapView.getPlugin(Plugin.MAPBOX_GESTURES_PLUGIN_ID);
   }
 
   private ReplayProgressObserver replayProgressObserver = new ReplayProgressObserver(mapboxReplayer);
 
   private OnIndicatorPositionChangedListener onIndicatorPositionChangedListener = point -> {
-    Expected<RouteLineError, VanishingRouteLineUpdateValue> vanishingRouteLineData = mapboxRouteLineApi.updateTraveledRouteLine(point);
+    Expected<RouteLineError, RouteLineUpdateValue> vanishingRouteLineData = mapboxRouteLineApi.updateTraveledRouteLine(point);
     if (vanishingRouteLineData != null && mapboxMap.getStyle() != null) {
-      mapboxRouteLineView.renderVanishingRouteLineUpdateValue(mapboxMap.getStyle(), vanishingRouteLineData);
+      mapboxRouteLineView.renderRouteLineUpdate(mapboxMap.getStyle(), vanishingRouteLineData);
     }
   };
 
@@ -449,7 +460,9 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
       if (mapboxMap.getStyle() == null) {
         return;
       }
-      mapboxRouteLineApi.updateWithRouteProgress(routeProgress);
+      mapboxRouteLineApi.updateWithRouteProgress(routeProgress, value -> {
+        mapboxRouteLineView.renderRouteLineUpdate(mapboxMap.getStyle(), value);
+      });
 
       Expected<InvalidPointError, UpdateManeuverArrowValue> updateArrowState = routeArrow.addUpcomingManeuverArrow(routeProgress);
       routeArrowView.renderManeuverUpdate(mapboxMap.getStyle(), updateArrowState);
@@ -482,14 +495,10 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
           closestRouteResult.onValue(input -> {
             final DirectionsRoute selectedRoute = input.getRoute();
             if (selectedRoute != mapboxRouteLineApi.getPrimaryRoute()) {
-              mapboxRouteLineApi.updateToPrimaryRoute(
-                  selectedRoute,
-                  routeSetValueRouteLineErrorExpected -> {
-                    // NOTE: We don't have to render the state because there is a RoutesObserver on the
-                    // MapboxNavigation object which will draw the routes. Rendering the state would draw the routes
-                    // twice unnecessarily in this implementation.
-                    mapboxNavigation.setRoutes(mapboxRouteLineApi.getRoutes());
-                  });
+              List<DirectionsRoute> updatedRoutes = mapboxRouteLineApi.getRoutes();
+              updatedRoutes.remove(selectedRoute);
+              updatedRoutes.add(0, selectedRoute);
+              mapboxNavigation.setRoutes(updatedRoutes);
             }
           });
         }
@@ -498,7 +507,7 @@ public class MapboxRouteLineActivity extends AppCompatActivity implements OnMapL
   private final OnMapClickListener mapClickListener = new OnMapClickListener() {
     @Override
     public boolean onMapClick(@NotNull Point point) {
-      if (mapboxMap.getStyle() != null && mapboxMap.getStyle().isFullyLoaded()) {
+      if (mapboxMap.getStyle() != null && mapboxMap.getStyle().isStyleLoaded()) {
         Visibility primaryLineVisibility = mapboxRouteLineView.getPrimaryRouteVisibility(mapboxMap.getStyle());
         Visibility alternativeRouteLinesVisibility = mapboxRouteLineView.getAlternativeRoutesVisibility(mapboxMap.getStyle());
         if (primaryLineVisibility == Visibility.VISIBLE && alternativeRouteLinesVisibility == Visibility.VISIBLE) {

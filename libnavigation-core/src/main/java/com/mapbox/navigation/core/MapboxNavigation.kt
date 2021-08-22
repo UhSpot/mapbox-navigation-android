@@ -10,19 +10,22 @@ import com.mapbox.android.core.location.LocationEngine
 import com.mapbox.annotation.module.MapboxModuleType
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.base.common.logger.Logger
 import com.mapbox.base.common.logger.model.Message
+import com.mapbox.base.common.logger.model.Tag
 import com.mapbox.common.TilesetDescriptor
 import com.mapbox.common.module.provider.MapboxModuleProvider
 import com.mapbox.common.module.provider.ModuleProviderArgument
+import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.formatter.DistanceFormatter
 import com.mapbox.navigation.base.internal.accounts.UrlSkuTokenProvider
+import com.mapbox.navigation.base.options.HistoryRecorderOptions
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.options.RoutingTilesOptions
 import com.mapbox.navigation.base.route.RouteAlternativesOptions
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.base.route.RouterCallback
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.base.trip.model.eh.EHorizonEdge
 import com.mapbox.navigation.base.trip.model.eh.EHorizonEdgeMetadata
@@ -34,9 +37,12 @@ import com.mapbox.navigation.core.arrival.ArrivalProgressObserver
 import com.mapbox.navigation.core.arrival.AutoArrivalController
 import com.mapbox.navigation.core.directions.session.DirectionsSession
 import com.mapbox.navigation.core.directions.session.RoutesObserver
-import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
+import com.mapbox.navigation.core.formatter.MapboxDistanceFormatter
+import com.mapbox.navigation.core.history.MapboxHistoryReader
+import com.mapbox.navigation.core.history.MapboxHistoryRecorder
+import com.mapbox.navigation.core.internal.ReachabilityService
 import com.mapbox.navigation.core.internal.accounts.MapboxNavigationAccounts
-import com.mapbox.navigation.core.internal.formatter.MapboxDistanceFormatter
+import com.mapbox.navigation.core.internal.utils.InternalUtils
 import com.mapbox.navigation.core.navigator.TilesetDescriptorFactory
 import com.mapbox.navigation.core.reroute.MapboxRerouteController
 import com.mapbox.navigation.core.reroute.RerouteController
@@ -48,13 +54,18 @@ import com.mapbox.navigation.core.routeoptions.MapboxRouteOptionsUpdater
 import com.mapbox.navigation.core.routerefresh.RouteRefreshController
 import com.mapbox.navigation.core.routerefresh.RouteRefreshControllerProvider
 import com.mapbox.navigation.core.telemetry.MapboxNavigationTelemetry
-import com.mapbox.navigation.core.telemetry.events.AppMetadata
 import com.mapbox.navigation.core.telemetry.events.FeedbackEvent
 import com.mapbox.navigation.core.trip.service.TripService
 import com.mapbox.navigation.core.trip.session.BannerInstructionsObserver
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.MapMatcherResult
 import com.mapbox.navigation.core.trip.session.MapMatcherResultObserver
+import com.mapbox.navigation.core.trip.session.NavigationSession
+import com.mapbox.navigation.core.trip.session.NavigationSessionState
+import com.mapbox.navigation.core.trip.session.NavigationSessionState.ActiveGuidance
+import com.mapbox.navigation.core.trip.session.NavigationSessionState.FreeDrive
+import com.mapbox.navigation.core.trip.session.NavigationSessionState.Idle
+import com.mapbox.navigation.core.trip.session.NavigationSessionStateObserver
 import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.navigation.core.trip.session.RoadObjectsOnRouteObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
@@ -69,18 +80,22 @@ import com.mapbox.navigation.core.trip.session.eh.RoadObjectsStore
 import com.mapbox.navigation.metrics.MapboxMetricsReporter
 import com.mapbox.navigation.navigator.internal.MapboxNativeNavigator
 import com.mapbox.navigation.navigator.internal.MapboxNativeNavigatorImpl
+import com.mapbox.navigation.utils.internal.ConnectivityHandler
 import com.mapbox.navigation.utils.internal.JobControl
 import com.mapbox.navigation.utils.internal.LoggerProvider
-import com.mapbox.navigation.utils.internal.NetworkStatusService
 import com.mapbox.navigation.utils.internal.ThreadController
 import com.mapbox.navigation.utils.internal.ifNonNull
 import com.mapbox.navigation.utils.internal.monitorChannelWithException
 import com.mapbox.navigator.ElectronicHorizonOptions
+import com.mapbox.navigator.FallbackVersionsObserver
 import com.mapbox.navigator.IncidentsOptions
 import com.mapbox.navigator.NavigatorConfig
+import com.mapbox.navigator.PollingConfig
 import com.mapbox.navigator.TileEndpointConfiguration
 import com.mapbox.navigator.TilesConfig
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.launch
 import java.lang.reflect.Field
 import java.util.Locale
 
@@ -102,23 +117,23 @@ private const val MAPBOX_NOTIFICATION_ACTION_CHANNEL = "notificationActionButton
  *
  * Feel free to visit our [docs pages and examples](https://docs.mapbox.com/android/beta/navigation/overview/) before diving in!
  *
- * The [MapboxNavigation] implementation can enter into a couple of internal states:
- * - `Idle`
- * - `Free Drive`
- * - `Active Guidance`
+ * The [MapboxNavigation] implementation can enter into the following [NavigationSessionState]s:
+ * - [Idle]
+ * - [FreeDrive]
+ * - [ActiveGuidance]
  *
- * The SDK starts off in an `Idle` state.
+ * The SDK starts off in an [Idle] state.
  *
  * ### Location
- * Whenever the [startTripSession] is called, the SDK will enter the `Free Drive` state starting to request and propagate location updates via the [LocationObserver].
+ * Whenever the [startTripSession] is called, the SDK will enter the [FreeDrive] state starting to request and propagate location updates via the [LocationObserver].
  *
  * This observer provides 2 location update values in mixed intervals - either the raw one received from the provided [LocationEngine]
  * or the enhanced one map-matched internally using SDK's native capabilities.
  *
- * In `Free Drive` mode, the enhanced location is computed using nearby to user location's routing tiles that are continuously updating in the background.
+ * In [FreeDrive] mode, the enhanced location is computed using nearby to user location's routing tiles that are continuously updating in the background.
  * This can be configured using the [RoutingTilesOptions] in the [NavigationOptions].
  *
- * If the session is stopped, the SDK will stop listening for raw location updates and enter the `Idle` state.
+ * If the session is stopped, the SDK will stop listening for raw location updates and enter the [Idle] state.
  *
  * ### Routing
  * A route can be requested with:
@@ -136,27 +151,27 @@ private const val MAPBOX_NOTIFICATION_ACTION_CHANNEL = "notificationActionButton
  *   .applyDefaultNavigationOptions()
  *   .applyLanguageAndVoiceUnitOptions(context)
  *   .accessToken(token)
- *   .coordinates(listOf(origin, destination))
+ *   .coordinatesList(listOf(origin, destination))
  *   .alternatives(true)
  *   .build()
  * mapboxNavigation.requestRoutes(
  *     routeOptions,
- *     object : RoutesRequestCallback {
+ *     object : RouterCallback {
  *         override fun onRoutesReady(routes: List<DirectionsRoute>) {
  *             mapboxNavigation.setRoutes(routes)
  *         }
- *         override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) { }
- *         override fun onRoutesRequestCanceled(routeOptions: RouteOptions) { }
+ *         override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) { }
+ *         override fun onCanceled(routeOptions: RouteOptions) { }
  *     }
  * )
  * ```
  *
- * If the SDK is in an `Idle` state, it stays in this same state even when a primary route is available.
+ * If the SDK is in an [Idle] state, it stays in this same state even when a primary route is available.
  *
- * If the SDK is already in the `Free Drive` mode or entering it whenever a primary route is available,
- * the SDK will enter the `Active Guidance` mode instead and propagate meaningful [RouteProgress].
+ * If the SDK is already in the [FreeDrive] mode or entering it whenever a primary route is available,
+ * the SDK will enter the [ActiveGuidance] mode instead and propagate meaningful [RouteProgress].
  *
- * When the routes are manually cleared, the SDK automatically fall back to either `Idle` or `Free Drive` state.
+ * When the routes are manually cleared, the SDK automatically fall back to either [Idle] or [FreeDrive] state.
  *
  * You can use [setRoutes] to provide new routes, clear current ones, or change the route at primary index 0.
  *
@@ -170,13 +185,18 @@ class MapboxNavigation(
     private val accessToken: String? = navigationOptions.accessToken
     private val mainJobController: JobControl = ThreadController.getMainScopeAndRootJob()
     private val directionsSession: DirectionsSession
-    private val navigator: MapboxNativeNavigator
+    private var navigator: MapboxNativeNavigator
     private val tripService: TripService
     private val tripSession: TripSession
     private val navigationSession: NavigationSession
-    private val logger: Logger
+    private val logger = LoggerProvider.logger
+    private val connectivityHandler: ConnectivityHandler = ConnectivityHandler(
+        logger,
+        Channel(Channel.CONFLATED)
+    )
     private val internalRoutesObserver: RoutesObserver
     private val internalOffRouteObserver: OffRouteObserver
+    private val internalFallbackVersionsObserver: FallbackVersionsObserver
     private val routeAlternativesController: RouteAlternativesController
     private val routeRefreshController: RouteRefreshController
     private val arrivalProgressObserver: ArrivalProgressObserver
@@ -196,12 +216,18 @@ class MapboxNavigation(
         }
     }
 
+    private val pollingConfig = PollingConfig(
+        navigationOptions.navigatorPredictionMillis / ONE_SECOND_IN_MILLIS,
+        InternalUtils.UNCONDITIONAL_POLLING_PATIENCE_MILLISECONDS / ONE_SECOND_IN_MILLIS,
+        InternalUtils.UNCONDITIONAL_POLLING_INTERVAL_MILLISECONDS / ONE_SECOND_IN_MILLIS
+    )
+
     private val navigatorConfig = NavigatorConfig(
         null,
         electronicHorizonOptions,
-        null,
+        pollingConfig,
         incidentsOptions,
-        false
+        null
     )
 
     private var notificationChannelField: Field? = null
@@ -211,6 +237,11 @@ class MapboxNavigation(
      */
     private var rerouteController: RerouteController?
     private val defaultRerouteController: RerouteController
+
+    /**
+     * [NavigationVersionSwitchObserver] is notified when navigation switches tiles version.
+     */
+    private val navigationVersionSwitchObservers = mutableSetOf<NavigationVersionSwitchObserver>()
 
     /**
      * [MapboxNavigation.roadObjectsStore] provides methods to get road objects metadata,
@@ -238,20 +269,49 @@ class MapboxNavigation(
      */
     val roadObjectMatcher: RoadObjectMatcher
 
+    /**
+     * Use the history recorder to save history files.
+     *
+     * @see [HistoryRecorderOptions] to enable and customize the directory
+     * @see [MapboxHistoryReader] to read the files
+     */
+    val historyRecorder = MapboxHistoryRecorder(navigationOptions, logger)
+
+    /**
+     * **THIS IS AN EXPERIMENTAL API, DO NOT USE IN A PRODUCTION ENVIRONMENT.**
+     *
+     * Navigation native experimental API. Do not store a reference to [Experimental] object,
+     * always access the object via `mapboxNavigation.experimental` because [MapboxNavigation] is
+     * responsible for it's lifecycle.
+     */
+    @ExperimentalPreviewMapboxNavigationAPI
+    val experimental: com.mapbox.navigator.Experimental
+        get() = navigator.experimental
+
+    private var reachabilityObserverId: Long? = null
+
     init {
         ThreadController.init()
-        logger = LoggerProvider.logger
         navigator = NavigationComponentProvider.createNativeNavigator(
             navigationOptions.deviceProfile,
             navigatorConfig,
-            createTilesConfig(),
+            createTilesConfig(
+                isFallback = false,
+                tilesVersion = navigationOptions.routingTilesOptions.tilesVersion
+            ),
+            historyRecorder.fileDirectory(),
             logger
         )
+        historyRecorder.historyRecorderHandle = navigator.getHistoryRecorderHandle()
         navigationSession = NavigationComponentProvider.createNavigationSession()
         directionsSession = NavigationComponentProvider.createDirectionsSession(
-            MapboxModuleProvider.createModule(MapboxModuleType.NavigationRouter, ::paramsProvider),
-            logger
+            MapboxModuleProvider.createModule(MapboxModuleType.NavigationRouter, ::paramsProvider)
         )
+        if (reachabilityObserverId == null) {
+            reachabilityObserverId = ReachabilityService.addReachabilityObserver(
+                connectivityHandler
+            )
+        }
         directionsSession.registerRoutesObserver(navigationSession)
         val notification: TripNotification = MapboxModuleProvider
             .createModule(MapboxModuleType.NavigationTripNotification, ::paramsProvider)
@@ -292,7 +352,7 @@ class MapboxNavigation(
                 this,
                 navigationOptions,
                 MapboxMetricsReporter,
-                logger
+                logger,
             )
         }
 
@@ -324,7 +384,9 @@ class MapboxNavigation(
 
         internalRoutesObserver = createInternalRoutesObserver()
         internalOffRouteObserver = createInternalOffRouteObserver()
+        internalFallbackVersionsObserver = createInternalFallbackVersionsObserver()
         tripSession.registerOffRouteObserver(internalOffRouteObserver)
+        tripSession.registerFallbackVersionsObserver(internalFallbackVersionsObserver)
         directionsSession.registerRoutesObserver(internalRoutesObserver)
 
         roadObjectsStore = RoadObjectsStore(navigator)
@@ -381,13 +443,22 @@ class MapboxNavigation(
     fun getTripSessionState(): TripSessionState = tripSession.getState()
 
     /**
+     * Provides the current navigation session state.
+     *
+     * @return current [NavigationSessionState]
+     * @see NavigationSessionStateObserver
+     * @see [registerNavigationSessionStateObserver]
+     */
+    fun getNavigationSessionState(): NavigationSessionState = navigationSession.state
+
+    /**
      * Requests a route using the available [Router] implementation.
      *
      * Use [MapboxNavigation.setRoutes] to supply the returned list of routes, transformed list, or a list from an external source, to be managed by the SDK.
      *
      * Example:
      * ```
-     * mapboxNavigation.requestRoutes(routeOptions, object : RoutesRequestCallback {
+     * mapboxNavigation.requestRoutes(routeOptions, object : RouterCallback {
      *     override fun onRoutesReady(routes: List<DirectionsRoute>) {
      *         ...
      *         mapboxNavigation.setRoutes(routes)
@@ -409,7 +480,7 @@ class MapboxNavigation(
      */
     fun requestRoutes(
         routeOptions: RouteOptions,
-        routesRequestCallback: RoutesRequestCallback
+        routesRequestCallback: RouterCallback
     ): Long {
         return directionsSession.requestRoutes(routeOptions, routesRequestCallback)
     }
@@ -437,8 +508,8 @@ class MapboxNavigation(
     fun setRoutes(routes: List<DirectionsRoute>) {
         rerouteController?.interrupt()
         routeAlternativesController.interrupt()
-        routeRefreshController.restart()
         directionsSession.routes = routes
+        routeRefreshController.restart()
     }
 
     /**
@@ -468,38 +539,22 @@ class MapboxNavigation(
         tripSession.unregisterAllRoadObjectsOnRouteObservers()
         tripSession.unregisterAllEHorizonObservers()
         tripSession.unregisterAllMapMatcherResultObservers()
+        tripSession.unregisterAllFallbackVersionsObservers()
         routeAlternativesController.unregisterAll()
         routeRefreshController.stop()
         directionsSession.routes = emptyList()
         resetTripSession()
+        navigator.unregisterAllObservers()
+        navigationVersionSwitchObservers.clear()
 
         navigationSession.unregisterAllNavigationSessionStateObservers()
         MapboxNavigationTelemetry.unregisterListeners(this@MapboxNavigation)
         ThreadController.cancelAllNonUICoroutines()
         ThreadController.cancelAllUICoroutines()
-    }
-
-    /**
-     * API used to retrieve logged location and route progress samples for debug purposes.
-     *
-     * @return history trace string
-     */
-    fun retrieveHistory(): String {
-        return MapboxNativeNavigatorImpl.getHistory()
-    }
-
-    /**
-     * API used to enable/disable location and route progress samples logs for debug purposes.
-     */
-    fun toggleHistory(isEnabled: Boolean) {
-        MapboxNativeNavigatorImpl.toggleHistory(isEnabled)
-    }
-
-    /**
-     * API used to artificially add debug events to logs.
-     */
-    fun addHistoryEvent(eventType: String, eventJsonProperties: String) {
-        MapboxNativeNavigatorImpl.addHistoryEvent(eventType, eventJsonProperties)
+        ifNonNull(reachabilityObserverId) {
+            ReachabilityService.removeReachabilityObserver(it)
+            reachabilityObserverId = null
+        }
     }
 
     /**
@@ -674,7 +729,8 @@ class MapboxNavigation(
 
     /**
      * Registers [ArrivalObserver]. Monitor arrival at stops and destinations. For more control
-     * of arrival at stops, see [setArrivalController].
+     * of arrival at stops, see [setArrivalController]. Use [RouteProgressObserver] to create
+     * custom experiences for arrival based on time or distance.
      *
      * @see [unregisterArrivalObserver]
      */
@@ -781,15 +837,14 @@ class MapboxNavigation(
      * @param feedbackSource one of [FeedbackEvent.Source]
      * @param screenshot encoded screenshot (optional)
      * @param feedbackSubType array of [FeedbackEvent.Description] (optional)
-     * @param appMetadata [AppMetadata] information (optional)
      */
+    @JvmOverloads
     fun postUserFeedback(
         @FeedbackEvent.Type feedbackType: String,
         description: String,
         @FeedbackEvent.Source feedbackSource: String,
         screenshot: String?,
         feedbackSubType: Array<String>? = emptyArray(),
-        appMetadata: AppMetadata? = null
     ) {
         MapboxNavigationTelemetry.postUserFeedback(
             feedbackType,
@@ -797,7 +852,6 @@ class MapboxNavigation(
             feedbackSource,
             screenshot,
             feedbackSubType,
-            appMetadata
         )
     }
 
@@ -813,55 +867,137 @@ class MapboxNavigation(
 
     /**
      * Stop observing the possibility of route alternatives.
+     *
+     * @param routeAlternativesObserver RouteAlternativesObserver
      */
     fun unregisterRouteAlternativesObserver(routeAlternativesObserver: RouteAlternativesObserver) {
         routeAlternativesController.unregister(routeAlternativesObserver)
     }
 
     /**
-     * Register a [NavigationSessionStateObserver] to be notified of the various Session states. Not publicly available
+     * Start observing navigation tiles version switch via [NavigationVersionSwitchObserver].
+     * Navigation might switch to a fallback tiles version when target tiles are not available
+     * and return back to the target version when tiles are loaded.
+     *
+     * @param observer NavigationVersionSwitchObserver
+     *
+     * @see [NavigationVersionSwitchObserver]
      */
-    internal fun registerNavigationSessionObserver(
+    fun registerNavigationVersionSwitchObserver(observer: NavigationVersionSwitchObserver) {
+        navigationVersionSwitchObservers.add(observer)
+    }
+
+    /**
+     * Stop observing tiles version switch via [NavigationVersionSwitchObserver].
+     * Navigation might switch to a fallback tiles version when target tiles are not available
+     * and return back to the target version when tiles are loaded.
+     *
+     * @param observer NavigationVersionSwitchObserver
+     *
+     * @see [NavigationVersionSwitchObserver]
+     */
+    fun unregisterNavigationVersionSwitchObserver(observer: NavigationVersionSwitchObserver) {
+        navigationVersionSwitchObservers.remove(observer)
+    }
+
+    /**
+     * Register a [NavigationSessionStateObserver] to be notified of the various Session states.
+     *
+     * @param navigationSessionStateObserver NavigationSessionStateObserver
+     */
+    fun registerNavigationSessionStateObserver(
         navigationSessionStateObserver: NavigationSessionStateObserver
     ) {
         navigationSession.registerNavigationSessionStateObserver(navigationSessionStateObserver)
     }
 
     /**
-     * Unregisters a [NavigationSessionStateObserver]. Not publicly available
+     * Unregisters a [NavigationSessionStateObserver].
+     *
+     * @param navigationSessionStateObserver NavigationSessionStateObserver
      */
-    internal fun unregisterNavigationSessionObserver(
+    fun unregisterNavigationSessionStateObserver(
         navigationSessionStateObserver: NavigationSessionStateObserver
     ) {
         navigationSession.unregisterNavigationSessionStateObserver(navigationSessionStateObserver)
     }
 
-    private fun createInternalRoutesObserver() = object : RoutesObserver {
-        override fun onRoutesChanged(routes: List<DirectionsRoute>) {
-            if (routes.isNotEmpty()) {
-                tripSession.route = routes[0]
+    private fun createInternalRoutesObserver() = RoutesObserver { routes ->
+        if (routes.isNotEmpty()) {
+            tripSession.route = routes[0]
+        } else {
+            tripSession.route = null
+        }
+    }
+
+    private fun createInternalOffRouteObserver() = OffRouteObserver { offRoute ->
+        if (offRoute) {
+            reroute()
+        }
+    }
+
+    private fun createInternalFallbackVersionsObserver() = object : FallbackVersionsObserver() {
+        override fun onFallbackVersionsFound(versions: List<String>) {
+            if (versions.isNotEmpty()) {
+                // the last version in the list is the latest one
+                val tilesVersion = versions.last()
+                recreateNavigatorInstance(isFallback = true, tilesVersion = tilesVersion)
+                navigationVersionSwitchObservers.forEach {
+                    it.onSwitchToFallbackVersion(tilesVersion)
+                }
             } else {
-                tripSession.route = null
+                logger.d(
+                    TAG,
+                    Message(
+                        "FallbackVersionsObserver.onFallbackVersionsFound called with an empty " +
+                            "versions list, navigator can't be recreated."
+                    )
+                )
+            }
+        }
+
+        override fun onCanReturnToLatest(version: String) {
+            recreateNavigatorInstance(
+                isFallback = false,
+                tilesVersion = navigationOptions.routingTilesOptions.tilesVersion
+            )
+            navigationVersionSwitchObservers.forEach {
+                it.onSwitchToTargetVersion(
+                    navigationOptions.routingTilesOptions.tilesVersion.takeIf { it.isNotEmpty() }
+                )
             }
         }
     }
 
-    private fun createInternalOffRouteObserver() = object : OffRouteObserver {
-        override fun onOffRouteStateChanged(offRoute: Boolean) {
-            if (offRoute) {
-                reroute()
+    private fun recreateNavigatorInstance(isFallback: Boolean, tilesVersion: String) {
+        logger.d(
+            TAG,
+            Message(
+                "recreateNavigatorInstance(). " +
+                    "isFallback = $isFallback, tilesVersion = $tilesVersion"
+            )
+        )
+
+        mainJobController.scope.launch {
+            navigator.recreate(
+                navigationOptions.deviceProfile,
+                navigatorConfig,
+                createTilesConfig(isFallback, tilesVersion),
+                historyRecorder.fileDirectory(),
+                logger
+            )
+            historyRecorder.historyRecorderHandle = navigator.getHistoryRecorderHandle()
+            tripSession.route?.let {
+                navigator.setRoute(
+                    it,
+                    tripSession.getRouteProgress()?.currentLegProgress?.legIndex ?: 0
+                )
             }
         }
     }
 
     private fun reroute() {
-        rerouteController?.reroute(
-            object : RerouteController.RoutesCallback {
-                override fun onNewRoutes(routes: List<DirectionsRoute>) {
-                    setRoutes(routes)
-                }
-            }
-        )
+        rerouteController?.reroute { routes -> setRoutes(routes) }
     }
 
     private fun obtainUserAgent(isFromNavigationUi: Boolean): String {
@@ -902,15 +1038,7 @@ class MapboxNavigation(
                     MapboxNativeNavigator::class.java,
                     MapboxNativeNavigatorImpl
                 ),
-                ModuleProviderArgument(Logger::class.java, logger),
-                ModuleProviderArgument(
-                    NetworkStatusService::class.java,
-                    NetworkStatusService(navigationOptions.applicationContext)
-                ),
-                ModuleProviderArgument(
-                    Boolean::class.java,
-                    navigationOptions.routeRefreshOptions.enabled
-                )
+                ModuleProviderArgument(ConnectivityHandler::class.java, connectivityHandler)
             )
             MapboxModuleType.NavigationTripNotification -> arrayOf(
                 ModuleProviderArgument(NavigationOptions::class.java, navigationOptions),
@@ -937,7 +1065,10 @@ class MapboxNavigation(
         tripSession.updateSensorEvent(sensorEvent)
     }
 
-    private fun createTilesConfig(): TilesConfig {
+    private fun createTilesConfig(
+        isFallback: Boolean,
+        tilesVersion: String
+    ): TilesConfig {
         // TODO StrictMode may report a violation as we're creating a File from the Main
         val offlineFilesPath = RoutingTilesFiles(navigationOptions.applicationContext, logger)
             .absolutePath(navigationOptions.routingTilesOptions)
@@ -957,18 +1088,21 @@ class MapboxNavigation(
             TileEndpointConfiguration(
                 navigationOptions.routingTilesOptions.tilesBaseUri.toString(),
                 dataset,
-                navigationOptions.routingTilesOptions.tilesVersion,
+                tilesVersion,
                 navigationOptions.accessToken ?: "",
                 USER_AGENT,
                 BuildConfig.NAV_NATIVE_SDK_VERSION,
-                false,
+                isFallback,
+                navigationOptions.routingTilesOptions.tilesVersion,
                 navigationOptions.routingTilesOptions.minDaysBetweenServerAndLocalTilesVersion
             )
         )
     }
 
-    companion object {
+    private companion object {
+        private val TAG = Tag("MbxNavigation")
         private const val USER_AGENT: String = "MapboxNavigationNative"
         private const val THREADS_COUNT = 2
+        private const val ONE_SECOND_IN_MILLIS = 1000.0
     }
 }

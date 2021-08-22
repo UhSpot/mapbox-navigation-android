@@ -3,8 +3,8 @@ package com.mapbox.navigation.core.trip.session.eh
 import com.mapbox.bindgen.Expected
 import com.mapbox.bindgen.ExpectedFactory
 import com.mapbox.geojson.Point
-import com.mapbox.navigation.base.internal.factory.EHorizonInstanceFactory
-import com.mapbox.navigation.base.internal.factory.RoadObjectInstanceFactory
+import com.mapbox.navigation.base.internal.factory.EHorizonFactory
+import com.mapbox.navigation.base.internal.factory.RoadObjectFactory
 import com.mapbox.navigation.base.trip.model.eh.OpenLRStandard
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.navigator.internal.MapboxNativeNavigator
@@ -28,6 +28,14 @@ class RoadObjectMatcher internal constructor(
 
     private val roadObjectMatcherObservers = CopyOnWriteArraySet<RoadObjectMatcherObserver>()
 
+    init {
+        navigator.setNativeNavigatorRecreationObserver {
+            if (roadObjectMatcherObservers.isNotEmpty()) {
+                navigator.roadObjectMatcher?.setListener(roadObjectMatcherListener)
+            }
+        }
+    }
+
     /**
      * Register road object matcher observer. It needs to be registered before any of the other
      * methods are called. Otherwise, the results are lost.
@@ -46,17 +54,34 @@ class RoadObjectMatcher internal constructor(
             val result: Expected<SDKRoadObjectMatcherError, SDKRoadObject> =
                 if (roadObject.isValue) {
                     ExpectedFactory.createValue(
-                        RoadObjectInstanceFactory.buildRoadObject(roadObject.value!!)
+                        RoadObjectFactory.buildRoadObject(roadObject.value!!)
                     )
                 } else {
                     ExpectedFactory.createError(
-                        RoadObjectInstanceFactory.buildRoadObjectMatchingError(roadObject.error!!)
+                        RoadObjectFactory.buildRoadObjectMatchingError(roadObject.error!!)
                     )
                 }
 
-            roadObjectMatcherObservers.forEach {
-                it.onRoadObjectMatched(result)
-            }
+            notifyMatchingObservers(result)
+        }
+
+        override fun onMatchingCancelled(id: String) {
+            val result: Expected<SDKRoadObjectMatcherError, SDKRoadObject> =
+                ExpectedFactory.createError(
+                    RoadObjectFactory.buildRoadObjectMatchingError(
+                        RoadObjectMatcherError("Matching cancelled", id)
+                    )
+                )
+
+            notifyMatchingObservers(result)
+        }
+    }
+
+    private fun notifyMatchingObservers(
+        result: Expected<SDKRoadObjectMatcherError, SDKRoadObject>
+    ) {
+        roadObjectMatcherObservers.forEach {
+            it.onRoadObjectMatched(result)
         }
     }
 
@@ -73,7 +98,7 @@ class RoadObjectMatcher internal constructor(
     ) {
         navigator.roadObjectMatcher?.matchOpenLR(
             openLRLocation,
-            EHorizonInstanceFactory.buildOpenLRStandard(openLRStandard),
+            EHorizonFactory.buildOpenLRStandard(openLRStandard),
             roadObjectId
         )
     }
@@ -133,11 +158,18 @@ class RoadObjectMatcher internal constructor(
     }
 
     /**
-     * Cancel road object matching
+     * Cancel road objects matching
      *
-     * @param roadObjectId unique id of the object
+     * @param roadObjectIds list of object ids to cancel matching
      */
-    fun cancel(roadObjectId: String) {
-        navigator.roadObjectMatcher?.cancel(roadObjectId)
+    fun cancel(roadObjectIds: List<String>) {
+        navigator.roadObjectMatcher?.cancel(roadObjectIds)
+    }
+
+    /**
+     * Cancel all road objects matching
+     */
+    fun cancelAll() {
+        navigator.roadObjectMatcher?.cancelAll()
     }
 }

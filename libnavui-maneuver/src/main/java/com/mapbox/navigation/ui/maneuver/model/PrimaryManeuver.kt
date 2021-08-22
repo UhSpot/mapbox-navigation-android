@@ -2,6 +2,7 @@ package com.mapbox.navigation.ui.maneuver.model
 
 import com.mapbox.api.directions.v5.models.BannerComponents
 import com.mapbox.api.directions.v5.models.BannerInstructions
+import java.util.UUID
 
 /**
  * "primary": {
@@ -26,6 +27,7 @@ import com.mapbox.api.directions.v5.models.BannerInstructions
  * }
  *
  * A simplified data structure representing [BannerInstructions.primary]
+ * @property id String A unique id
  * @property text String Plain text with all the [BannerComponents] text combined.
  * @property type String? indicates the type of maneuver.
  * @property degrees Double? degrees at which you will be exiting a roundabout.
@@ -36,13 +38,14 @@ import com.mapbox.api.directions.v5.models.BannerInstructions
  * @constructor
  */
 
-class PrimaryManeuver private constructor(
-    val text: String,
+class PrimaryManeuver internal constructor(
+    val id: String = UUID.randomUUID().toString(),
+    val text: String = "",
     val type: String? = null,
     val degrees: Double? = null,
     val modifier: String? = null,
     val drivingSide: String? = null,
-    val componentList: List<Component>
+    val componentList: List<Component> = listOf()
 ) {
 
     /**
@@ -54,6 +57,7 @@ class PrimaryManeuver private constructor(
 
         other as PrimaryManeuver
 
+        if (id != other.id) return false
         if (text != other.text) return false
         if (type != other.type) return false
         if (degrees != other.degrees) return false
@@ -68,7 +72,8 @@ class PrimaryManeuver private constructor(
      * Regenerate whenever a change is made
      */
     override fun hashCode(): Int {
-        var result = text.hashCode()
+        var result = id.hashCode()
+        result = 31 * result + (text.hashCode())
         result = 31 * result + (type?.hashCode() ?: 0)
         result = 31 * result + (degrees?.hashCode() ?: 0)
         result = 31 * result + (modifier?.hashCode() ?: 0)
@@ -89,99 +94,5 @@ class PrimaryManeuver private constructor(
             "drivingSide=$drivingSide, " +
             "componentList=$componentList" +
             ")"
-    }
-
-    /**
-     * @return Builder matching the one used to create this instance
-     */
-    fun toBuilder(): Builder {
-        return Builder()
-            .text(text)
-            .type(type)
-            .degrees(degrees)
-            .modifier(modifier)
-            .drivingSide(drivingSide)
-            .componentList(componentList)
-    }
-
-    /**
-     * Build a new [PrimaryManeuver]
-     * @property text String
-     * @property type String?
-     * @property degrees Double?
-     * @property modifier String?
-     * @property drivingSide String?
-     * @property componentList List<Component>
-     */
-    class Builder {
-        private var text: String = ""
-        private var type: String? = null
-        private var degrees: Double? = null
-        private var modifier: String? = null
-        private var drivingSide: String? = null
-        private var componentList: List<Component> = listOf()
-
-        /**
-         * apply text to the Builder.
-         * @param text String
-         * @return Builder
-         */
-        fun text(text: String): Builder =
-            apply { this.text = text }
-
-        /**
-         * apply type to the Builder.
-         * @param type String?
-         * @return Builder
-         */
-        fun type(type: String?): Builder =
-            apply { this.type = type }
-
-        /**
-         * apply degrees to the Builder.
-         * @param degrees Double?
-         * @return Builder
-         */
-        fun degrees(degrees: Double?): Builder =
-            apply { this.degrees = degrees }
-
-        /**
-         * apply modifier to the Builder.
-         * @param modifier String?
-         * @return Builder
-         */
-        fun modifier(modifier: String?): Builder =
-            apply { this.modifier = modifier }
-
-        /**
-         * apply drivingSide to the Builder.
-         * @param drivingSide String?
-         * @return Builder
-         */
-        fun drivingSide(drivingSide: String?): Builder =
-            apply { this.drivingSide = drivingSide }
-
-        /**
-         * apply componentList to the Builder.
-         * @param componentList List<Component>
-         * @return Builder
-         */
-        fun componentList(componentList: List<Component>): Builder =
-            apply { this.componentList = componentList }
-
-        /**
-         * Build the [PrimaryManeuver]
-         * @return PrimaryManeuver
-         */
-        fun build(): PrimaryManeuver {
-            return PrimaryManeuver(
-                text,
-                type,
-                degrees,
-                modifier,
-                drivingSide,
-                componentList
-            )
-        }
     }
 }

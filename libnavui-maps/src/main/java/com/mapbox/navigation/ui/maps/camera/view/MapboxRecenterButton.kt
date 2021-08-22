@@ -12,8 +12,8 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.mapbox.navigation.ui.maps.R
 import com.mapbox.navigation.ui.maps.databinding.MapboxRecenterLayoutBinding
 import com.mapbox.navigation.ui.utils.internal.extensions.afterMeasured
-import com.mapbox.navigation.ui.utils.internal.extensions.extend
-import com.mapbox.navigation.ui.utils.internal.extensions.shrink
+import com.mapbox.navigation.ui.utils.internal.extensions.measureTextWidth
+import com.mapbox.navigation.ui.utils.internal.extensions.play
 import com.mapbox.navigation.ui.utils.internal.extensions.slideWidth
 
 /**
@@ -21,7 +21,7 @@ import com.mapbox.navigation.ui.utils.internal.extensions.slideWidth
  */
 class MapboxRecenterButton : ConstraintLayout {
 
-    private var textWidth = 0
+    private var shrunkWidth = 0
     private var isAnimationRunning = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val binding = MapboxRecenterLayoutBinding.inflate(
@@ -65,7 +65,7 @@ class MapboxRecenterButton : ConstraintLayout {
     override fun onFinishInflate() {
         super.onFinishInflate()
         binding.recenterText.afterMeasured {
-            textWidth = width
+            shrunkWidth = width
         }
     }
 
@@ -85,22 +85,24 @@ class MapboxRecenterButton : ConstraintLayout {
     /**
      * Invoke the function to show optional text associated with the view.
      * @param duration for the view to be in the extended mode before it starts to shrink.
+     * @param text for the view to show in the extended mode.
      */
-    fun showTextAndExtend(duration: Long) {
+    @JvmOverloads
+    fun showTextAndExtend(
+        duration: Long,
+        text: String = context.getString(R.string.mapbox_recenter),
+    ) {
         if (!isAnimationRunning) {
             isAnimationRunning = true
-            val extendToWidth = EXTEND_TO_WIDTH * context.resources.displayMetrics.density
-            val animator = getAnimator(textWidth, extendToWidth.toInt())
-            binding.recenterText.extend(
-                animator,
+            val extendedWidth = (binding.recenterText.measureTextWidth(text) + shrunkWidth)
+                .coerceAtLeast(MIN_EXTENDED_WIDTH * context.resources.displayMetrics.density)
+            getAnimator(shrunkWidth, extendedWidth.toInt()).play(
                 doOnStart = {
-                    binding.recenterText.text = context.getString(R.string.mapbox_recenter)
+                    binding.recenterText.text = text
                     binding.recenterText.visibility = View.VISIBLE
                     mainHandler.postDelayed(
                         {
-                            val endAnimator = getAnimator(extendToWidth.toInt(), textWidth)
-                            binding.recenterText.shrink(
-                                endAnimator,
+                            getAnimator(extendedWidth.toInt(), shrunkWidth).play(
                                 doOnStart = {
                                     binding.recenterText.text = null
                                 },
@@ -132,13 +134,24 @@ class MapboxRecenterButton : ConstraintLayout {
         typedArray.getDrawable(
             R.styleable.MapboxRecenterButton_recenterButtonDrawable
         ).also { binding.recenterIcon.setImageDrawable(it) }
+
+        typedArray.getDrawable(
+            R.styleable.MapboxRecenterButton_recenterButtonBackground,
+        )?.let { background ->
+            binding.recenterIcon.background = background
+            binding.recenterText.background = background
+        }
+
+        typedArray.getColorStateList(
+            R.styleable.MapboxRecenterButton_recenterButtonTextColor,
+        )?.let { binding.recenterText.setTextColor(it) }
     }
 
     private fun getAnimator(from: Int, to: Int) =
         binding.recenterText.slideWidth(from, to, SLIDE_DURATION)
 
     private companion object {
-        const val SLIDE_DURATION = 300L
-        const val EXTEND_TO_WIDTH = 150
+        private const val SLIDE_DURATION = 300L
+        private const val MIN_EXTENDED_WIDTH = 150
     }
 }

@@ -16,7 +16,7 @@ import com.mapbox.api.directions.v5.models.StepManeuver.MERGE
 import com.mapbox.api.directions.v5.models.StepManeuver.OFF_RAMP
 import com.mapbox.api.directions.v5.models.StepManeuver.ON_RAMP
 import com.mapbox.api.directions.v5.models.StepManeuver.TURN
-import com.mapbox.navigation.ui.maneuver.model.TurnIcon
+import com.mapbox.navigation.base.internal.maneuver.ManeuverTurnIcon
 import com.mapbox.navigation.ui.maneuver.model.TurnIconResources
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -33,7 +33,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -56,7 +56,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -79,7 +79,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -102,7 +102,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -125,7 +125,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = UTURN
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -148,7 +148,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -171,7 +171,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -194,7 +194,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SHARP_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -217,7 +217,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SHARP_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -240,7 +240,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier = " "
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -263,7 +263,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -286,7 +286,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -309,7 +309,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -332,7 +332,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -355,7 +355,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -378,7 +378,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -401,7 +401,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -424,7 +424,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -447,7 +447,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String? = null
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -470,7 +470,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -493,7 +493,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -516,7 +516,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -539,7 +539,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -562,7 +562,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -585,7 +585,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -608,7 +608,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -631,7 +631,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -654,7 +654,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -677,7 +677,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -700,7 +700,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -723,7 +723,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -746,7 +746,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -769,7 +769,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -792,7 +792,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -815,7 +815,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -838,7 +838,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -861,7 +861,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -884,7 +884,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -907,7 +907,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -930,7 +930,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -953,7 +953,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -976,7 +976,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -999,7 +999,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1022,7 +1022,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1045,7 +1045,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1068,7 +1068,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1091,7 +1091,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SHARP_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1114,7 +1114,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SHARP_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1135,7 +1135,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1158,7 +1158,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1181,7 +1181,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = STRAIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1204,7 +1204,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = UTURN
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1227,7 +1227,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1250,7 +1250,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SLIGHT_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1273,7 +1273,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SHARP_LEFT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1296,7 +1296,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = SHARP_RIGHT
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
@@ -1319,7 +1319,7 @@ class TurnIconHelperTest {
         val mockDegrees: Float? = null
         val mockModifier: String = " "
         val mockDrivingSide: String? = null
-        val expected = TurnIcon(
+        val expected = ManeuverTurnIcon(
             mockDegrees,
             mockDrivingSide,
             false,
