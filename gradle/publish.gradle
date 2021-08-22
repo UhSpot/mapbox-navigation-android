@@ -1,5 +1,5 @@
 apply plugin: 'maven-publish'
-
+apply plugin: 'com.mapbox.sdkRegistry'
 apply from: file("${rootDir}/gradle/artifact-settings.gradle")
 apply from: "${rootDir}/gradle/kdoc-settings.gradle"
 
@@ -46,16 +46,6 @@ afterEvaluate {
                 artifact(androidKdocJar)
             }
         }
-        repositories {
-        maven {
-            url 'https://pkgs.dev.azure.com/uhspot/uhspot-web/_packaging/uhspot-navigation-android/maven/v1'
-            credentials {
-                username "uhspot-navigation-android"
-                //The Azure DevOps Services build system will use the "SYSTEM_ACCESSTOKEN" to authenticate to Azure DevOps Services feeds
-                password project.hasProperty("AZURE_ARTIFACTS_ENV_ACCESS_TOKEN") ? project.property("AZURE_ARTIFACTS_ENV_ACCESS_TOKEN") : vstsMavenAccessToken
-            }
-        }
-    }
     }
 }
 
@@ -77,6 +67,15 @@ sdkNameMap["libnavui-resources"] = "mobile-navigation-ui-resources"
 sdkNameMap["libnavui-voice"] = "mobile-navigation-ui-voice"
 sdkNameMap["libnavui-speedlimit"] = "mobile-navigation-ui-speedlimit"
 
+registry {
+    sdkName = sdkNameMap[project.name]
+    production = true
+    snapshot = project.ext.versionName.endsWith("-SNAPSHOT")
+    override = snapshot ? true : false
+    dryRun = false
+    publish = true
+    publications = ["release"]
+}
 
 task androidSourcesJar(type: Jar) {
     classifier = 'sources'

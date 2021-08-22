@@ -1,7 +1,8 @@
 ext {
+  def kotlinVersion = "1.5.20"
 
   androidVersions = [
-      minSdkVersion           : 24,
+      minSdkVersion           : 21,
       targetSdkVersion        : 30,
       compileSdkVersion       : 30
   ]
@@ -11,17 +12,17 @@ ext {
   // version which we should use in this build
   def mapboxNavigatorVersion = System.getenv("FORCE_MAPBOX_NAVIGATION_NATIVE_VERSION")
   if (mapboxNavigatorVersion == null || mapboxNavigatorVersion == '') {
-      mapboxNavigatorVersion = '50.0.0'
+      mapboxNavigatorVersion = '63.1.0'
   }
   println("Navigation Native version: " + mapboxNavigatorVersion)
 
   version = [
-      mapboxMapSdk              : '10.0.0-beta.20',
-      mapboxSdkServices         : '5.9.0-alpha.5',
-      mapboxEvents              : '7.0.3',
-      mapboxCore                : '4.0.2',
+      mapboxMapSdk              : '10.0.0-rc.6',
+      mapboxSdkServices         : '6.0.0-alpha.3',
+      mapboxEvents              : '8.1.0',
+      mapboxCore                : '5.0.0',
       mapboxNavigator           : "${mapboxNavigatorVersion}",
-      mapboxCommonNative        : '12.0.0',
+      mapboxCommonNative        : '16.2.0',
       mapboxCrashMonitor        : '2.0.0',
       mapboxAnnotationPlugin    : '0.8.0',
       mapboxBaseAndroid         : '0.5.0',
@@ -47,9 +48,9 @@ ext {
       lifecycleViewModelKtx     : '2.2.0',
       gmsLocation               : '17.0.0',
       ktlint                    : '0.41.0',
-      kotlinStdLib              : '1.5.10',
+      kotlinStdLib              : kotlinVersion,
       firebaseCrashlytics       : '17.3.1',
-      multidex                  : '2.0.0',
+      multidex                  : '2.0.1',
       json                      : '20180813',
       coroutinesAndroid         : '1.5.0',
       okhttp                    : '4.9.0',
@@ -163,7 +164,7 @@ ext {
       gradle               : '4.0.1',
       dependencyGraph      : '0.5.0',
       dependencyUpdates    : '0.29.0',
-      kotlin               : '1.5.10',
+      kotlin               : kotlinVersion,
       license              : '0.8.5',
       jacoco               : '0.2',
       googleServices       : '4.3.3',
@@ -172,8 +173,7 @@ ext {
       mapboxSdkRegistry    : '0.4.0',
       mapboxAccessToken    : '0.2.1',
       mapboxNativeDownload : '0.1.2',
-      firebaseCrashlytics  : '2.5.1',
-      kapt                 : '3.5.0'
+      firebaseCrashlytics  : '2.5.1'
   ]
 
   pluginDependencies = [
